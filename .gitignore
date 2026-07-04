@@ -16,3 +16,9 @@ data/container.pkl
 Thumbs.db
 Desktop.ini
 *.tmp
+
+ztfs_engine/target/
+
+ztfs_engine/target/
+
+ztfs_engine/target/
