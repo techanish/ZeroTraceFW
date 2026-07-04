@@ -4,9 +4,15 @@ import hashlib
 import hmac
 import os
 
+try:
+    import ztfs_engine
+    _HAS_ZTFS_ENGINE = True
+except ImportError:
+    _HAS_ZTFS_ENGINE = False
+
 
 class KeyDerivation:
-    def derive_key(self, password: str, salt: bytes, iterations: int = 10000) -> bytes:
+    def derive_key(self, password: str, salt: bytes, iterations: int = 600000) -> bytes:
         if not isinstance(password, str) or not password:
             raise ValueError("Password must be a non-empty string.")
         if not isinstance(salt, (bytes, bytearray)):
@@ -14,6 +20,11 @@ class KeyDerivation:
         if iterations < 1:
             raise ValueError("Iterations must be positive.")
 
+        if _HAS_ZTFS_ENGINE:
+            # ztfs_engine natively returns zeroized memory that's dropped when out of scope,
+            # but in Python we just get bytes.
+            return bytes(ztfs_engine.derive_key_pbkdf2(password, salt, iterations))
+        
         try:
             return hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), bytes(salt), iterations, dklen=32)
         except Exception:
@@ -21,15 +32,21 @@ class KeyDerivation:
 
     @staticmethod
     def generate_salt() -> bytes:
+        if _HAS_ZTFS_ENGINE:
+            return bytes(ztfs_engine.generate_salt())
         return os.urandom(32)
 
     @staticmethod
     def hash_password(password: str) -> str:
+        if _HAS_ZTFS_ENGINE:
+            return ztfs_engine.hash_password(password)
         return hashlib.sha256(password.encode("utf-8")).hexdigest()
 
     def verify_password(self, password: str, stored_hash: str | None) -> bool:
         if not stored_hash:
             return False
+        if _HAS_ZTFS_ENGINE:
+            return ztfs_engine.verify_password(password, stored_hash)
         return hmac.compare_digest(self.hash_password(password), stored_hash)
 
     @staticmethod

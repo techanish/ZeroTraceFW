@@ -4,6 +4,12 @@ import gc
 import os
 from pathlib import Path
 
+try:
+    import ztfs_engine
+    _HAS_ZTFS_ENGINE = True
+except ImportError:
+    _HAS_ZTFS_ENGINE = False
+
 
 class SecureWiper:
     def wipe_file(self, file_path: str | Path) -> bool:
@@ -53,6 +59,10 @@ class SecureWiper:
             return False
         value = namespace[obj_name]
         size = len(repr(value).encode("utf-8"))
+        
+        if _HAS_ZTFS_ENGINE and isinstance(value, (bytes, bytearray)):
+            ztfs_engine.secure_wipe_bytes(value)
+            
         namespace[obj_name] = os.urandom(max(size, 32))
         del namespace[obj_name]
         gc.collect()
@@ -64,7 +74,10 @@ class SecureWiper:
         for key in ("key", "iv", "salt"):
             value = file_entry.get(key)
             if isinstance(value, (bytes, bytearray)):
+                if _HAS_ZTFS_ENGINE:
+                    ztfs_engine.secure_wipe_bytes(value)
                 file_entry[key] = None
+        gc.collect()
         return file_entry
 
     def full_system_wipe(self, mount_path: str | Path, container_path: str | Path | None, control_path: str | Path | None = None) -> dict:
