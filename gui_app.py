@@ -41,6 +41,7 @@ except ImportError:
 
 from zerotracefs.encryption import EncryptionEngine
 from zerotracefs.key_derivation import KeyDerivation
+from zerotracefs.watermark import DynamicWatermark
 
 from PyQt6.QtWidgets import QHBoxLayout, QSlider
 
@@ -55,6 +56,32 @@ class UniversalViewerDialog(QDialog):
         self.resize(1024, 768)
         self.setWindowFlags(self.windowFlags() | Qt.WindowType.WindowMaximizeButtonHint)
         self.setStyleSheet("background-color: #0f172a; color: #e2e8f0;")
+        
+        self.open_time = datetime.datetime.now()
+        
+        # Read file metadata for security policies
+        self.watermark_enabled = True
+        self.copy_protected = True
+        self.print_protected = True
+        try:
+            if STATUS_FILE.exists():
+                with open(STATUS_FILE, "r") as sf:
+                    sdata = json.load(sf)
+                    for d in sdata.get("files", {}).get("details", []):
+                        if str(d.get("filename")) == str(filename):
+                            self.watermark_enabled = d.get("watermark_enabled", True)
+                            self.copy_protected = d.get("copy_protected", True)
+                            self.print_protected = d.get("print_protected", True)
+                            break
+        except Exception:
+            pass
+
+        self.watermark_engine = DynamicWatermark(user_id="user_unknown", session_id="gui_session")
+        if self.watermark_enabled:
+            # Apply watermark to image bytes before rendering if it's an image
+            ext = Path(filename).suffix.lower()
+            if ext in [".png", ".jpg", ".jpeg", ".gif", ".bmp"]:
+                self.content_bytes = self.watermark_engine.apply_to_image_bytes(self.content_bytes)
         
         self.main_layout = QVBoxLayout(self)
         
@@ -100,6 +127,18 @@ class UniversalViewerDialog(QDialog):
             self.render_media(ext)
         else:
             self.render_text()
+            
+    def closeEvent(self, event):
+        duration = (datetime.datetime.now() - self.open_time).total_seconds()
+        self.parent().queue_command({
+            "action": "log-event",
+            "type": "DOCUMENT_VIEWED",
+            "filename": str(self.filename),
+            "message": f"Closed viewer after {duration:.1f}s",
+            "category": "access",
+            "duration": duration
+        })
+        super().closeEvent(event)
             
     def on_zoom_drag(self, value):
         self.zoom_level = value
@@ -283,8 +322,45 @@ class UniversalViewerDialog(QDialog):
 
     def _setup_text_edit(self, text, is_html=False):
         from PyQt6.QtWidgets import QTextEdit
-        self.text_edit = QTextEdit()
+        from PyQt6.QtGui import QKeySequence
+        from PyQt6.QtCore import QEvent
+        
+        class SecureTextEdit(QTextEdit):
+            def __init__(self, parent_dialog, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.parent_dialog = parent_dialog
+                
+            def keyPressEvent(self, e):
+                if self.parent_dialog.copy_protected and e.matches(QKeySequence.StandardKey.Copy):
+                    self.parent_dialog.parent().queue_command({
+                        "action": "log-event",
+                        "type": "COPY_ATTEMPT",
+                        "filename": str(self.parent_dialog.filename),
+                        "message": "Blocked clipboard copy attempt",
+                        "category": "security",
+                        "risk_score": 60
+                    })
+                    return # Block copy
+                super().keyPressEvent(e)
+                
+            def contextMenuEvent(self, e):
+                if self.parent_dialog.copy_protected:
+                    return # Block context menu (copy/paste)
+                super().contextMenuEvent(e)
+
+        self.text_edit = SecureTextEdit(self)
         self.text_edit.setReadOnly(True)
+        
+        if self.watermark_enabled:
+            overlay_html = self.watermark_engine.get_html_watermark_overlay()
+            if is_html:
+                # Inject overlay before closing body or just append it
+                text = text + overlay_html
+            else:
+                text = text.replace('\n', '<br>')
+                text = f"<div style='font-family: Consolas; font-size: 14px;'>{text}</div>" + overlay_html
+                is_html = True
+
         if is_html:
             self.text_edit.setHtml(text)
         else:
@@ -428,8 +504,14 @@ class ZeroTraceFSControlPanel(QMainWindow):
 
         # Status Indicator
         self.status_indicator = QFrame(central_widget)
-        self.status_indicator.setGeometry(25, 75, 940, 8)
+        self.status_indicator.setGeometry(25, 75, 460, 8)
         self.status_indicator.setStyleSheet("background-color: #475569; border-radius: 4px;")
+        
+        # Environment Security Indicator
+        self.env_indicator = QFrame(central_widget)
+        self.env_indicator.setGeometry(505, 75, 460, 8)
+        self.env_indicator.setStyleSheet("background-color: #475569; border-radius: 4px;")
+        self.env_indicator.setToolTip("Environment Security Status")
 
         # Status Box
         self.status_box = QTextEdit(central_widget)
@@ -921,15 +1003,19 @@ class ZeroTraceFSControlPanel(QMainWindow):
                     age = (now - dt).total_seconds()
                     if age <= 35:
                         self.status_indicator.setStyleSheet("background-color: #22c55e; border-radius: 4px;")
+                        self.env_indicator.setStyleSheet("background-color: #22c55e; border-radius: 4px;")
                     elif age <= 300:
                         self.status_indicator.setStyleSheet("background-color: #facc15; border-radius: 4px;")
+                        self.env_indicator.setStyleSheet("background-color: #facc15; border-radius: 4px;")
                     else:
                         self.status_indicator.setStyleSheet("background-color: #ef4444; border-radius: 4px;")
+                        self.env_indicator.setStyleSheet("background-color: #ef4444; border-radius: 4px;")
                 except:
                     pass
         except Exception as e:
             self.status_box.setText(f"Error reading status: {e}")
             self.status_indicator.setStyleSheet("background-color: #ef4444; border-radius: 4px;")
+            self.env_indicator.setStyleSheet("background-color: #ef4444; border-radius: 4px;")
 
     def update_quick_files(self):
         current = self.quick_file_box.currentText()
