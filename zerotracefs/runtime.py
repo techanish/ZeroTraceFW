@@ -12,9 +12,15 @@ from .auth import AuthManager
 from .container import ContainerManager
 from .encryption import EncryptionEngine
 from .filesystem import VirtualFileSystem
+from .notifications import NotificationEngine
+from .security_checks import EnvironmentVerifier
 from .setup_env import run_setup
 from .sync import SyncEngine
 from .triggers import TriggerEngine
+from .rbac import AccessControl, UserContext, Role
+from .policy_engine import PolicyEngine
+from .ai_classifier import AIClassifier
+from .cloud.gdrive import GoogleDriveBackend
 from .ui import (
     display_banner,
     display_file_list,
@@ -32,11 +38,24 @@ def run_zerotracefs() -> bool:
     display_banner()
 
     wiper = SecureWiper()
-    container_manager = ContainerManager(paths["container_path"])
+    
+    # Initialize Cloud Backend (Will fallback gracefully if credentials missing)
+    cloud_backend = GoogleDriveBackend()
+    
+    container_manager = ContainerManager(paths["container_path"], cloud_backend=cloud_backend)
     vfs = VirtualFileSystem()
     auth = AuthManager(max_attempts=5)
     trigger_engine = TriggerEngine()
     audit = AuditLogger()
+    notifier = NotificationEngine()
+    env_verifier = EnvironmentVerifier(policy="warn")
+    
+    rbac = AccessControl()
+    policy_engine = PolicyEngine(rbac)
+    ai_classifier = AIClassifier()
+    
+    # Setup the local admin user for testing Phase 5
+    current_user = UserContext("admin", Role.OWNER, geo_location="US")
 
     master_password = None
     sync_engine = None
@@ -73,6 +92,11 @@ def run_zerotracefs() -> bool:
                     "ttl_remaining_seconds": compute_file_ttl_remaining(meta, now_time=now_v),
                     "max_reads": meta.get("max_reads"),
                     "deadline": format_utc(parse_time(meta.get("deadline"))),
+                    "owner_id": meta.get("owner_id"),
+                    "classification_level": meta.get("classification_level"),
+                    "watermark_enabled": meta.get("watermark_enabled"),
+                    "copy_protected": meta.get("copy_protected"),
+                    "print_protected": meta.get("print_protected"),
                 }
             )
         return details
@@ -126,7 +150,8 @@ def run_zerotracefs() -> bool:
     def apply_trigger_actions() -> bool:
         results = trigger_engine.check_all(vfs)
         if results["global"]["triggered"]:
-            audit.log_event("TRIGGER_FIRE", f"Global trigger fired: {results['global']['reason']}")
+            audit.log_event("TRIGGER_FIRE", f"Global trigger fired: {results['global']['reason']}", event_category="security", risk_score=100)
+            notifier.notify_security_event("Global Trigger", results['global']['reason'])
             for fname in vfs.get_all_filenames():
                 entry = vfs.files[fname]
                 vfs.files[fname] = wiper.destroy_crypto_artifacts(entry.__dict__)  # best-effort sanitization
@@ -135,6 +160,7 @@ def run_zerotracefs() -> bool:
             audit.log_event(
                 "WIPE_COMPLETE",
                 f"Global wipe complete. mount={wipe_result['mount_wiped']} container={wipe_result['container_wiped']}",
+                event_category="system"
             )
             print("Vault is empty")
             return True
@@ -143,11 +169,12 @@ def run_zerotracefs() -> bool:
             fname = item["filename"]
             if not vfs.file_exists(fname):
                 continue
-            audit.log_event("TRIGGER_FIRE", item["reason"], fname)
+            audit.log_event("TRIGGER_FIRE", item["reason"], fname, event_category="policy", risk_score=80)
+            notifier.notify_policy_violation(fname, item["reason"])
             if sync_engine:
                 sync_engine.remove_from_mount(fname)
             vfs.remove_file(fname)
-            audit.log_event("DESTRUCTION", f"Destroyed due to trigger: {item['reason']}", fname)
+            audit.log_event("DESTRUCTION", f"Destroyed due to trigger: {item['reason']}", fname, event_category="security")
 
         return False
 
@@ -164,6 +191,8 @@ def run_zerotracefs() -> bool:
 
     def save_everything():
         container_manager.save_state(vfs, auth, trigger_engine, audit)
+        if container_manager.push_to_cloud():
+            audit.log_event("SYNC_PUSH", "Pushed encrypted container state to Google Drive", event_category="system")
 
     def read_preview(filename: str, content: bytes, max_text_chars: int = 2000, max_hex_bytes: int = 256) -> dict:
         extension = Path(filename).suffix.lower().lstrip(".") or None
@@ -234,6 +263,13 @@ def run_zerotracefs() -> bool:
                     filename = Path(str(payload.get("target", payload.get("filename", "")))).name
                     if not vfs.file_exists(filename):
                         raise ValueError(f"File not found in vault: {filename}")
+                    
+                    meta = vfs.get_metadata(filename)
+                    decision = policy_engine.evaluate(meta, current_user, "read")
+                    if not decision.granted:
+                        audit.log_event("POLICY_BLOCK", f"Read blocked: {decision.reason}", filename, event_category="policy", risk_score=decision.risk_score)
+                        raise PermissionError(f"Access Denied: {decision.reason}")
+                        
                     file_password = str(payload.get("file_password", payload.get("password", ""))).strip()
                     content = vfs.read_file(filename, file_password)
                     meta = vfs.get_metadata(filename)
@@ -244,13 +280,20 @@ def run_zerotracefs() -> bool:
                         "ttl_remaining_seconds": compute_file_ttl_remaining(meta),
                     }
                     data.update(read_preview(filename, content))
-                    audit.log_event("FILE_READ", "File read via Explorer", filename)
+                    audit.log_event("FILE_READ", "File read via Explorer", filename, event_category="access")
                     archive_command_result(command_file, payload, "ok", f"Read {filename}", data)
                     apply_trigger_actions()
                 elif action == "export":
                     filename = Path(str(payload.get("target", payload.get("filename", "")))).name
                     if not vfs.file_exists(filename):
                         raise ValueError(f"File not found in vault: {filename}")
+                        
+                    meta = vfs.get_metadata(filename)
+                    decision = policy_engine.evaluate(meta, current_user, "read")
+                    if not decision.granted:
+                        audit.log_event("POLICY_BLOCK", f"Export blocked: {decision.reason}", filename, event_category="policy", risk_score=decision.risk_score)
+                        raise PermissionError(f"Access Denied: {decision.reason}")
+                        
                     destination = str(payload.get("destination", payload.get("dest", payload.get("output", "")))).strip()
                     if not destination:
                         destination = str(paths["control_path"] / "exports")
@@ -260,7 +303,7 @@ def run_zerotracefs() -> bool:
                     export_path = (dest_path / filename) if dest_path.is_dir() else dest_path
                     export_path.parent.mkdir(parents=True, exist_ok=True)
                     export_path.write_bytes(content)
-                    audit.log_event("FILE_READ", f"Exported via Explorer to {export_path}", filename)
+                    audit.log_event("FILE_READ", f"Exported via Explorer to {export_path}", filename, event_category="access", download_attempt=True, risk_score=40)
                     meta = vfs.get_metadata(filename)
                     archive_command_result(
                         command_file,
@@ -282,7 +325,7 @@ def run_zerotracefs() -> bool:
                     if minutes <= 0:
                         raise ValueError("set-ttl requires a positive 'minutes' value.")
                     vfs.set_trigger(filename, "ttl_seconds", minutes * 60)
-                    audit.log_event("TRIGGER_SET", f"Set TTL to {minutes:.2f} minutes via Explorer", filename)
+                    audit.log_event("TRIGGER_SET", f"Set TTL to {minutes:.2f} minutes via Explorer", filename, event_category="policy")
                     archive_command_result(command_file, payload, "ok", f"TTL set for {filename}")
                 elif action == "set-reads":
                     filename = Path(str(payload.get("target", payload.get("filename", "")))).name
@@ -290,7 +333,7 @@ def run_zerotracefs() -> bool:
                     if max_reads < 1:
                         raise ValueError("set-reads requires integer 'max_reads' >= 1.")
                     vfs.set_trigger(filename, "max_reads", max_reads)
-                    audit.log_event("TRIGGER_SET", f"Set max reads to {max_reads} via Explorer", filename)
+                    audit.log_event("TRIGGER_SET", f"Set max reads to {max_reads} via Explorer", filename, event_category="policy")
                     archive_command_result(command_file, payload, "ok", f"Read limit set for {filename}")
                 elif action == "set-deadline":
                     filename = Path(str(payload.get("target", payload.get("filename", "")))).name
@@ -299,7 +342,7 @@ def run_zerotracefs() -> bool:
                     if not deadline:
                         raise ValueError("set-deadline requires parseable 'deadline' datetime.")
                     vfs.set_trigger(filename, "deadline", deadline)
-                    audit.log_event("TRIGGER_SET", f"Set deadline to {deadline.isoformat()} via Explorer", filename)
+                    audit.log_event("TRIGGER_SET", f"Set deadline to {deadline.isoformat()} via Explorer", filename, event_category="policy")
                     archive_command_result(command_file, payload, "ok", f"Deadline set for {filename}")
                 elif action == "destroy":
                     filename = Path(str(payload.get("target", payload.get("filename", "")))).name
@@ -308,10 +351,11 @@ def run_zerotracefs() -> bool:
                     archive_command_result(command_file, payload, "ok", f"Destroyed {filename}")
                 elif action == "auth-fail":
                     auth.state.failed_attempts += 1
-                    audit.log_event("AUTH_FAIL", "Failed authentication via GUI Open Securely")
+                    audit.log_event("AUTH_FAIL", "Failed authentication via GUI Open Securely", event_category="auth", risk_score=50)
                     if auth.state.failed_attempts >= auth.state.max_attempts:
                         auth.state.is_locked = True
-                        audit.log_event("AUTH_FAIL", "Authentication lockout reached via GUI")
+                        audit.log_event("AUTH_FAIL", "Authentication lockout reached via GUI", event_category="auth", risk_score=100)
+                        notifier.notify_security_event("Lockout", "Authentication lockout reached via GUI.")
                         save_everything()
                         vfs.files = {}
                         wiper.full_system_wipe(paths["mount_path"], paths["container_path"], paths["control_path"])
@@ -320,7 +364,7 @@ def run_zerotracefs() -> bool:
                     else:
                         archive_command_result(command_file, payload, "error", f"Auth failed. {auth.get_remaining_attempts()} attempts left.")
                 elif action == "destroy-all":
-                    audit.log_event("DESTRUCTION", "Manual full vault destruction via Explorer")
+                    audit.log_event("DESTRUCTION", "Manual full vault destruction complete", event_category="security", risk_score=100)
                     vfs.files = {}
                     wiper.full_system_wipe(paths["mount_path"], paths["container_path"], paths["control_path"])
                     archive_command_result(command_file, payload, "ok", "Full vault destruction complete")
@@ -334,8 +378,17 @@ def run_zerotracefs() -> bool:
                     file_password = str(payload.get("file_password", payload.get("password", ""))).strip()
                     if not file_password:
                         raise ValueError("import requires a 'file_password'")
+                        
                     vfs.add_file(filename, content, file_password)
                     
+                    # Run AI Classification
+                    ai_result = ai_classifier.classify_bytes(content)
+                    entry = vfs.files.get(vfs._normalize_name(filename))
+                    if entry:
+                        entry.metadata["classification_level"] = ai_result.level
+                        entry.metadata["ai_categories"] = ai_result.categories
+                        entry.metadata["owner_id"] = current_user.user_id
+                        
                     # Write the .zfs encrypted file to the mount directory
                     entry = vfs.files.get(vfs._normalize_name(filename))
                     if entry:
@@ -350,12 +403,19 @@ def run_zerotracefs() -> bool:
                     except Exception as e:
                         print(f"Warning: Could not delete source file after import: {e}")
                     
-                    audit.log_event("FILE_CREATE", "Imported file into vault via GUI/Explorer", filename)
+                    audit.log_event("FILE_CREATE", "Imported file into vault via GUI/Explorer", filename, event_category="system")
                     archive_command_result(command_file, payload, "ok", f"Imported {filename}")
                 elif action == "open-secure":
                     filename = Path(str(payload.get("target", payload.get("filename", "")))).name
                     if not vfs.file_exists(filename):
                         raise ValueError(f"File not found in vault: {filename}")
+                        
+                    meta = vfs.get_metadata(filename)
+                    decision = policy_engine.evaluate(meta, current_user, "read")
+                    if not decision.granted:
+                        audit.log_event("POLICY_BLOCK", f"Open Secure blocked: {decision.reason}", filename, event_category="policy", risk_score=decision.risk_score)
+                        raise PermissionError(f"Access Denied: {decision.reason}")
+                        
                     file_password = str(payload.get("file_password", payload.get("password", ""))).strip()
                     
                     content = vfs.read_file(filename, file_password)
@@ -366,17 +426,26 @@ def run_zerotracefs() -> bool:
                     temp_path = temp_dir / f"{stamp}_{filename}"
                     temp_path.write_bytes(content)
                     
-                    audit.log_event("FILE_READ", f"Opened securely to {temp_path}", filename)
+                    audit.log_event("FILE_READ", f"Opened securely to {temp_path}", filename, event_category="access")
                     archive_command_result(command_file, payload, "ok", f"Opened securely: {filename}", {"temporary_path": str(temp_path)})
                     apply_trigger_actions()
+                elif action == "log-event":
+                    cat = payload.get("category", "system")
+                    msg = payload.get("message", "Custom GUI event")
+                    event_type = payload.get("type", "GUI_EVENT")
+                    fname = payload.get("filename")
+                    score = int(payload.get("risk_score", 0))
+                    duration = payload.get("duration")
+                    audit.log_event(event_type, msg, fname, event_category=cat, risk_score=score, viewing_duration_seconds=duration)
+                    archive_command_result(command_file, payload, "ok", "Event logged")
                 elif action == "lock":
                     sync_engine.clear_mount()
-                    audit.log_event("SYSTEM_STOP", "Vault locked via Explorer")
+                    audit.log_event("SYSTEM_STOP", "Vault locked via Explorer", event_category="system")
                     save_everything()
                     archive_command_result(command_file, payload, "ok", "Vault locked")
                     stop_requested = True
                 elif action == "quit":
-                    audit.log_event("SYSTEM_STOP", "Secure shutdown requested via Explorer")
+                    audit.log_event("SYSTEM_STOP", "Secure shutdown requested via Explorer", event_category="system")
                     save_everything()
                     sync_engine.clear_mount()
                     archive_command_result(command_file, payload, "ok", "Secure shutdown complete")
@@ -425,10 +494,14 @@ def run_zerotracefs() -> bool:
         auth.setup(master_password, duress_password)
         trigger_engine.set_dead_man_switch(dead_man_hours * 3600)
         trigger_engine.set_global_ttl(global_ttl_hours * 3600)
-        audit.log_event("SYSTEM_START", "New vault initialized")
+        audit.log_event("SYSTEM_START", "New vault initialized", event_category="system")
         save_everything()
         print("Vault initialized and saved to data/container.pkl")
     else:
+        # Load cloud state first (conflict resolution)
+        if container_manager.pull_from_cloud():
+            audit.log_event("SYNC_PULL", "Downloaded newer container state from Google Drive", event_category="system")
+
         state = container_manager.load_state(paths["container_path"])
         vfs.deserialize(state["vfs_data"])
         auth.deserialize(state["auth_data"])
@@ -440,22 +513,24 @@ def run_zerotracefs() -> bool:
             auth_result = auth.authenticate(candidate)
             if auth_result == "granted":
                 master_password = candidate
-                audit.log_event("AUTH_SUCCESS", "Vault unlocked successfully")
+                audit.log_event("AUTH_SUCCESS", "Vault unlocked successfully", event_category="auth")
                 break
             if auth_result == "duress":
-                audit.log_event("AUTH_DURESS", "Duress password accepted")
+                audit.log_event("AUTH_DURESS", "Duress password accepted", event_category="auth", risk_score=100)
+                notifier.notify_security_event("Duress Code Used", "Full vault destruction initiated.")
                 save_everything()
                 wiper.full_system_wipe(paths["mount_path"], paths["container_path"], paths["control_path"])
                 print("Vault is empty")
                 return False
             if auth_result == "lockout":
-                audit.log_event("AUTH_FAIL", "Authentication lockout reached")
+                audit.log_event("AUTH_FAIL", "Authentication lockout reached", event_category="auth", risk_score=100)
+                notifier.notify_security_event("Lockout", "Authentication lockout reached.")
                 save_everything()
                 wiper.full_system_wipe(paths["mount_path"], paths["container_path"], paths["control_path"])
                 print("Vault is empty")
                 return False
 
-            audit.log_event("AUTH_FAIL", "Incorrect password")
+            audit.log_event("AUTH_FAIL", "Incorrect password", event_category="auth", risk_score=50)
             save_everything()
             print(f"Wrong password. {auth.get_remaining_attempts()} attempts remaining.")
 
@@ -491,14 +566,27 @@ def run_zerotracefs() -> bool:
                 break
 
             for fname in changes.get("new", []):
-                audit.log_event("FILE_CREATE", "File added and encrypted", fname)
+                audit.log_event("FILE_CREATE", "File added and encrypted", fname, event_category="system")
             for fname in changes.get("modified", []):
-                audit.log_event("FILE_MODIFY", "File modified and re-encrypted", fname)
+                audit.log_event("FILE_MODIFY", "File modified and re-encrypted", fname, event_category="system")
             for fname in changes.get("deleted", []):
-                audit.log_event("FILE_DELETE", "File deleted from mount", fname)
+                audit.log_event("FILE_DELETE", "File deleted from mount", fname, event_category="system")
             for fname in changes.get("read", []):
                 if vfs.note_file_read(fname):
-                    audit.log_event("FILE_READ", "Read detected from mount access", fname)
+                    audit.log_event("FILE_READ", "Read detected from mount access", fname, event_category="access")
+
+            # Environment Verification Check
+            if cycle_counter % 20 == 0:
+                env_report = env_verifier.verify_environment()
+                if not env_report.is_secure:
+                    details = ", ".join(env_report.warnings)
+                    audit.log_event("SECURITY_WARNING", f"Environment insecure: {details}", event_category="security", risk_score=80)
+                    notifier.notify_security_event("Insecure Environment", details)
+                    if env_verifier.policy == "destroy":
+                        audit.log_event("DESTRUCTION", "Destroying vault due to insecure environment policy.", event_category="security", risk_score=100)
+                        vfs.files = {}
+                        wiper.full_system_wipe(paths["mount_path"], paths["container_path"], paths["control_path"])
+                        break
 
             if apply_trigger_actions():
                 break
@@ -540,7 +628,7 @@ def run_zerotracefs() -> bool:
                     else:
                         vfs.add_file(fname, content, file_password)
                         (paths["mount_path"] / fname).write_bytes(content)
-                        audit.log_event("FILE_CREATE", "Imported file into vault", fname)
+                        audit.log_event("FILE_CREATE", "Imported file into vault", fname, event_category="system")
                         print(f"Imported: {fname}")
             elif action == "read" and len(parts) >= 2:
                 fname = parts[1]
@@ -554,7 +642,7 @@ def run_zerotracefs() -> bool:
                         print("--- FILE CONTENT START ---")
                         print(preview["preview"])
                         print("--- FILE CONTENT END ---")
-                        audit.log_event("FILE_READ", "File read command executed", fname)
+                        audit.log_event("FILE_READ", "File read command executed", fname, event_category="access")
                         apply_trigger_actions()
                     except ValueError as e:
                         print(f"Error reading file: {e}")
@@ -570,12 +658,12 @@ def run_zerotracefs() -> bool:
                 fname = parts[1]
                 minutes = float(parts[2])
                 vfs.set_trigger(fname, "ttl_seconds", minutes * 60)
-                audit.log_event("TRIGGER_SET", f"Set TTL to {minutes:.2f} minutes", fname)
+                audit.log_event("TRIGGER_SET", f"Set TTL to {minutes:.2f} minutes", fname, event_category="policy")
             elif action == "set-reads" and len(parts) >= 3:
                 fname = parts[1]
                 max_reads = int(parts[2])
                 vfs.set_trigger(fname, "max_reads", max_reads)
-                audit.log_event("TRIGGER_SET", f"Set max reads to {max_reads}", fname)
+                audit.log_event("TRIGGER_SET", f"Set max reads to {max_reads}", fname, event_category="policy")
             elif action == "set-deadline" and len(parts) >= 4:
                 fname = parts[1]
                 dt_string = " ".join(parts[2:])
@@ -584,7 +672,7 @@ def run_zerotracefs() -> bool:
                     print("Could not parse datetime.")
                 else:
                     vfs.set_trigger(fname, "deadline", deadline)
-                    audit.log_event("TRIGGER_SET", f"Set deadline to {deadline.isoformat()}", fname)
+                    audit.log_event("TRIGGER_SET", f"Set deadline to {deadline.isoformat()}", fname, event_category="policy")
             elif action == "audit":
                 for row in audit.get_log():
                     print(row)
@@ -600,7 +688,7 @@ def run_zerotracefs() -> bool:
                         export_path = destination / fname if destination.is_dir() else destination
                         export_path.parent.mkdir(parents=True, exist_ok=True)
                         export_path.write_bytes(content)
-                        audit.log_event("FILE_READ", f"Exported to {export_path}", fname)
+                        audit.log_event("FILE_READ", f"Exported to {export_path}", fname, event_category="access", download_attempt=True, risk_score=40)
                         apply_trigger_actions()
                     except ValueError as e:
                         print(f"Error exporting file: {e}")
@@ -617,7 +705,7 @@ def run_zerotracefs() -> bool:
             elif action == "destroy-all":
                 confirm = prompt_input("Type DESTROY to confirm full vault wipe: ").strip()
                 if confirm == "DESTROY":
-                    audit.log_event("DESTRUCTION", "Manual full vault destruction")
+                    audit.log_event("DESTRUCTION", "Manual full vault destruction", event_category="security", risk_score=100)
                     vfs.files = {}
                     wiper.full_system_wipe(paths["mount_path"], paths["container_path"], paths["control_path"])
                     print("Full vault destruction complete.")
@@ -625,7 +713,7 @@ def run_zerotracefs() -> bool:
                 print("Cancelled full destruction.")
             elif action == "lock":
                 sync_engine.clear_mount()
-                audit.log_event("SYSTEM_STOP", "Vault locked")
+                audit.log_event("SYSTEM_STOP", "Vault locked", event_category="system")
                 save_everything()
                 print("Vault locked. Mount wiped, encrypted backend retained.")
                 break
@@ -652,12 +740,12 @@ def run_zerotracefs() -> bool:
                         master_password = new_pw
                         sync_engine.master_password = new_pw
                         sync_engine.populate_mount()
-                        audit.log_event("PASSWORD_CHANGE", "Master password changed successfully")
+                        audit.log_event("PASSWORD_CHANGE", "Master password changed successfully", event_category="auth")
                         print("Master password changed and vault re-keyed.")
                 else:
                     print("Current password is incorrect.")
             elif action == "quit":
-                audit.log_event("SYSTEM_STOP", "Secure shutdown requested")
+                audit.log_event("SYSTEM_STOP", "Secure shutdown requested", event_category="system")
                 save_everything()
                 sync_engine.clear_mount()
                 print("Secure shutdown complete.")
