@@ -1,28 +1,32 @@
-# ZeroTraceFS
+# ZeroTraceFW
 
-ZeroTraceFS is a self-destructing encrypted file system implemented in Python.
-It provides a virtual vault where files in mount/ are synchronized into encrypted storage in data/container.pkl, then automatically destroyed when configured triggers fire.
+ZeroTraceFW (formerly ZeroTraceFS) is a secure, cloud-based document management framework.
+It combines client-side encryption, memory-only document access, intelligent policy enforcement, automated self-destruction, and continuous activity auditing to provide complete lifecycle protection for confidential data.
 
 ## Highlights
 
-- AES-256-CBC encryption for file payloads
-- PBKDF2-HMAC-SHA256 key derivation (10,000 iterations)
-- Duress password and failed-auth lockout destruction
-- Per-file and global self-destruct triggers
-- Secure wipe engine (3 random overwrite passes + 1 zero pass)
-- Encrypted state persistence across sessions
-- Interactive CLI commands in main.py
+- **Rust Security Engine**: High-performance AES-256-GCM encryption and secure memory via PyO3.
+- **Cloud Sync**: Built-in Google Drive integration for secure, encrypted state persistence across sessions.
+- **Dynamic Watermarking**: CSS and image overlays identifying the user and session.
+- **Policy Engine & RBAC**: Real-time evaluation of roles, geo-fencing, and time-based access restrictions.
+- **AI Classification**: Local heuristic scanner to auto-tag sensitive data (PII, Financial, Secret).
+- **Anti-Forensics & Tamper Detection**: Rust-level process environment verification.
+- **Advanced GUI Viewer**: Memory-only Qt6 viewer blocking clipboard and print events.
 
 ## Prerequisites
 
 - Python 3.10+
+- Rust toolchain (`cargo`, `rustc`) via MSVC for building the engine
 - pip
 
 ## Installation and Startup
 
 1. Clone or extract the project into a folder named ZeroTraceFS.
-2. Open the folder in VS Code.
-3. Install dependencies:
+2. Build the Rust engine:
+```powershell
+.\build_engine.bat
+```
+3. Install Python dependencies:
 
 ```powershell
 python -m pip install -r requirements.txt
@@ -218,26 +222,25 @@ powershell -ExecutionPolicy Bypass -File .\tools\uninstall_explorer_menu.ps1
 
 ```text
 +---------------------------------------------------------------+
-|                        ZeroTraceFS CLI                        |
-|                     (main.py + zerotracefs/ui.py)             |
+|                       ZeroTraceFW GUI                         |
+|                     (Qt6 Viewer & Control)                    |
 +------------------------------+--------------------------------+
                                |
                                v
 +---------------------------------------------------------------+
-|                 Core Orchestration and Policy                 |
-|  AuthManager | TriggerEngine | SyncEngine | AuditLogger       |
+|                 Core Orchestration & Policies                 |
+|  AuthManager | TriggerEngine | PolicyEngine | AIClassifier    |
 +------------------------------+--------------------------------+
                                |
                                v
 +---------------------------------------------------------------+
-|                 Cryptography and Persistence Layer            |
-| EncryptionEngine | KeyDerivation | VirtualFileSystem          |
-| ContainerManager (data/container.pkl) | SecureWiper           |
+|             Rust Security Engine (ztfs_engine)                |
+| AES-256-GCM | Tamper Detection | Secure Memory | Anti-Debug   |
 +------------------------------+--------------------------------+
                                |
                                v
 +---------------------------------------------------------------+
-| Local Filesystem: mount/ plaintext workspace, data/ encrypted |
+|        Local Persistence & Google Drive Cloud Backend         |
 +---------------------------------------------------------------+
 ```
 
