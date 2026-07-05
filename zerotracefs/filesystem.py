@@ -21,7 +21,7 @@ class VirtualFileSystem:
         self.files: dict[str, FileEntry] = {}
         self._encryption = EncryptionEngine()
         self._key_derivation = KeyDerivation()
-        self._key_iterations = 10000
+        self._key_iterations = 600000
 
     def add_file(self, filename: str, content: bytes, file_password: str) -> bool:
         if not isinstance(content, (bytes, bytearray)):
@@ -118,6 +118,11 @@ class VirtualFileSystem:
                     "ttl_remaining_seconds": ttl_remaining,
                     "max_reads": meta.get("max_reads"),
                     "deadline": format_utc(parse_time(meta.get("deadline"))),
+                    "owner_id": meta.get("owner_id"),
+                    "classification_level": meta.get("classification_level"),
+                    "watermark_enabled": meta.get("watermark_enabled"),
+                    "copy_protected": meta.get("copy_protected"),
+                    "print_protected": meta.get("print_protected"),
                 }
             )
         return rows
@@ -148,6 +153,47 @@ class VirtualFileSystem:
             raise ValueError("Unsupported trigger_type. Use ttl_seconds, max_reads, or deadline.")
 
         return True
+
+    def set_access_policy(self, filename: str, policy: dict) -> bool:
+        fname = self._normalize_name(filename)
+        entry = self.files.get(fname)
+        if not entry:
+            raise KeyError(f"File not found in VFS: {fname}")
+        
+        # Merge policy with existing access_policy
+        current_policy = entry.metadata.get("access_policy", {})
+        current_policy.update(policy)
+        entry.metadata["access_policy"] = current_policy
+        return True
+
+    def set_security_flags(self, filename: str, watermark: bool = None, copy_protect: bool = None, print_protect: bool = None) -> bool:
+        fname = self._normalize_name(filename)
+        entry = self.files.get(fname)
+        if not entry:
+            raise KeyError(f"File not found in VFS: {fname}")
+        
+        if watermark is not None: entry.metadata["watermark_enabled"] = watermark
+        if copy_protect is not None: entry.metadata["copy_protected"] = copy_protect
+        if print_protect is not None: entry.metadata["print_protected"] = print_protect
+        return True
+
+    def check_access_policy(self, filename: str, user_context: dict) -> dict:
+        fname = self._normalize_name(filename)
+        entry = self.files.get(fname)
+        if not entry:
+            return {"granted": False, "reason": "File not found"}
+            
+        policy = entry.metadata.get("access_policy", {})
+        
+        # Check roles
+        allowed_roles = entry.metadata.get("allowed_roles", [])
+        if allowed_roles and user_context.get("role") not in allowed_roles:
+            return {"granted": False, "reason": f"Role '{user_context.get('role')}' not permitted"}
+            
+        # Check custom rules inside access_policy dict
+        # Future RBAC integration point
+        
+        return {"granted": True, "reason": "Policy allowed"}
 
     def file_exists(self, filename: str) -> bool:
         return self._normalize_name(filename) in self.files
@@ -201,6 +247,14 @@ class VirtualFileSystem:
             "max_reads": None,
             "deadline": None,
             "is_destroyed": False,
+            "owner_id": None,
+            "classification_level": "internal",
+            "allowed_roles": ["OWNER", "EDITOR", "VIEWER", "AUDITOR"],
+            "access_policy": {},
+            "watermark_enabled": True,
+            "copy_protected": True,
+            "print_protected": True,
+            "geo_fence": None,
         }
 
     def _decrypt_entry(self, filename: str, file_password: str, increment_read: bool) -> bytes:
