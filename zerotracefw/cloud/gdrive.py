@@ -39,10 +39,20 @@ class GoogleDriveBackend(CloudBackend):
                 if creds and creds.expired and creds.refresh_token:
                     creds.refresh(Request())
                 else:
-                    if not os.path.exists(self.credentials_path):
-                        logger.warning(f"Google Drive credentials not found at {self.credentials_path}. Cloud sync disabled.")
-                        return
-                    flow = InstalledAppFlow.from_client_secrets_file(self.credentials_path, SCOPES)
+                    # Embedded OAuth Client Config using local secrets.py
+                    from zerotracefw.secrets import GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
+                    client_config = {
+                        "installed": {
+                            "client_id": GOOGLE_CLIENT_ID,
+                            "project_id": "zerotracefw",
+                            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                            "token_uri": "https://oauth2.googleapis.com/token",
+                            "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+                            "client_secret": GOOGLE_CLIENT_SECRET,
+                            "redirect_uris": ["http://localhost"]
+                        }
+                    }
+                    flow = InstalledAppFlow.from_client_config(client_config, SCOPES)
                     creds = flow.run_local_server(port=0)
                 with open('token.json', 'w') as token:
                     token.write(creds.to_json())

@@ -579,7 +579,6 @@ def run_zerotracefw() -> bool:
                 hb = client.heartbeat()
                 if hb.get("status") == "active":
                     server_ts = float(hb.get("server_time", time.time()))
-                    from datetime import datetime, timezone
                     trigger_engine.server_time = datetime.fromtimestamp(server_ts, tz=timezone.utc)
                 else:
                     audit.log_event("SERVER_DISCONNECT", f"Heartbeat failed: {hb.get('detail')}", event_category="security", risk_score=90)

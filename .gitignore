@@ -8,7 +8,8 @@ dist/
 build/
 
 # Runtime vault artifacts
-.zerotracefs/
+.zerotracefw/
+zerotracefw/secrets.py
 mount/
 data/container.pkl
 

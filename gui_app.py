@@ -528,6 +528,22 @@ class ZeroTraceFWControlPanel(QMainWindow):
         self.quick_file_box = QComboBox(central_widget)
         self.quick_file_box.setGeometry(795, 105, 165, 25)
 
+        # Account Section
+        self.account_frame = QFrame(central_widget)
+        self.account_frame.setGeometry(795, 140, 165, 80)
+        self.account_frame.setStyleSheet("background-color: #1e293b; border: 1px solid #334155; border-radius: 6px;")
+        
+        acc_label = QLabel("Account", self.account_frame)
+        acc_label.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
+        acc_label.setStyleSheet("color: #cbd5e1; border: none; background: transparent;")
+        acc_label.move(10, 8)
+        
+        self.btn_google_login = StyledButton("Login with Google", "#2563eb", "#ffffff")
+        self.btn_google_login.setParent(self.account_frame)
+        self.btn_google_login.setGeometry(10, 35, 145, 32)
+        self.btn_google_login.setIcon(QIcon.fromTheme("applications-internet"))
+        self.btn_google_login.clicked.connect(self.on_google_login)
+
         # Buttons Row 1
         self.btn_import = StyledButton("Import File", "#3b82f6")
         self.btn_import.setParent(central_widget)
@@ -1063,6 +1079,18 @@ class ZeroTraceFWControlPanel(QMainWindow):
             except:
                 pass
 
+    def on_google_login(self):
+        try:
+            from zerotracefw.cloud.gdrive import GoogleDriveBackend
+            backend = GoogleDriveBackend()
+            if backend.service:
+                QMessageBox.information(self, "Success", "Successfully authenticated with Google Drive!\nCloud sync is now enabled.")
+                self.write_log("Google Drive authentication successful. Cloud sync enabled.", "success")
+            else:
+                QMessageBox.warning(self, "Warning", "Authentication process started but did not complete successfully.")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to authenticate: {e}\n(Make sure you have valid OAuth credentials configured in the source code)")
+            self.write_log(f"Google Drive auth failed: {e}", "error")
 
 if __name__ == "__main__":
     import multiprocessing
