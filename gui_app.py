@@ -1065,8 +1065,24 @@ class ZeroTraceFSControlPanel(QMainWindow):
 
 
 if __name__ == "__main__":
+    import multiprocessing
+    if sys.platform.startswith('win'):
+        multiprocessing.freeze_support()
+
     if len(sys.argv) > 1 and sys.argv[1] == "--engine-mode":
         # PyInstaller packaged mode: act as the engine when spawned with this flag
+        import threading
+        import time
+        import uvicorn
+        from server.main import app as fastapi_app
+        
+        def run_server():
+            uvicorn.run(fastapi_app, host="127.0.0.1", port=8000, log_level="error", access_log=False)
+            
+        server_thread = threading.Thread(target=run_server, daemon=True)
+        server_thread.start()
+        time.sleep(1)
+
         from main import run_zerotracefs
         run_zerotracefs()
         sys.exit(0)
