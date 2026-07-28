@@ -21,6 +21,7 @@ from .rbac import AccessControl, UserContext, Role
 from .policy_engine import PolicyEngine
 from .ai_classifier import AIClassifier
 from .cloud.gdrive import GoogleDriveBackend
+from .client_api import ServerClient
 from .ui import (
     display_banner,
     display_file_list,
@@ -190,7 +191,11 @@ def run_zerotracefs() -> bool:
         return True
 
     def save_everything():
-        container_manager.save_state(vfs, auth, trigger_engine, audit)
+        # In client-server mode we only save vault_id and vfs locally
+        if not hasattr(container_manager, 'current_vault_id') or not container_manager.current_vault_id:
+            # Fallback if vault_id isn't set yet during creation
+            return
+        container_manager.save_state(container_manager.current_vault_id, vfs)
         if container_manager.push_to_cloud():
             audit.log_event("SYNC_PUSH", "Pushed encrypted container state to Google Drive", event_category="system")
 
@@ -271,7 +276,7 @@ def run_zerotracefs() -> bool:
                         raise PermissionError(f"Access Denied: {decision.reason}")
                         
                     file_password = str(payload.get("file_password", payload.get("password", ""))).strip()
-                    content = vfs.read_file(filename, file_password)
+                    content = vfs.read_file_into_memory(filename, file_password)
                     meta = vfs.get_metadata(filename)
                     data = {
                         "filename": filename,
@@ -298,7 +303,7 @@ def run_zerotracefs() -> bool:
                     if not destination:
                         destination = str(paths["control_path"] / "exports")
                     file_password = str(payload.get("file_password", payload.get("password", ""))).strip()
-                    content = vfs.read_file(filename, file_password)
+                    content = vfs.read_file_into_memory(filename, file_password)
                     dest_path = Path(destination)
                     export_path = (dest_path / filename) if dest_path.is_dir() else dest_path
                     export_path.parent.mkdir(parents=True, exist_ok=True)
@@ -418,7 +423,7 @@ def run_zerotracefs() -> bool:
                         
                     file_password = str(payload.get("file_password", payload.get("password", ""))).strip()
                     
-                    content = vfs.read_file(filename, file_password)
+                    content = vfs.read_file_into_memory(filename, file_password)
                     import uuid
                     temp_dir = paths["control_path"] / "open_temp"
                     temp_dir.mkdir(parents=True, exist_ok=True)
@@ -491,11 +496,21 @@ def run_zerotracefs() -> bool:
         dead_man_hours = float(prompt_input("Set dead man's switch interval in hours (0 to disable): ") or 0)
         global_ttl_hours = float(prompt_input("Set global vault TTL in hours (0 for no limit): ") or 0)
 
-        auth.setup(master_password, duress_password)
-        trigger_engine.set_dead_man_switch(dead_man_hours * 3600)
-        trigger_engine.set_global_ttl(global_ttl_hours * 3600)
-        audit.log_event("SYSTEM_START", "New vault initialized", event_category="system")
-        save_everything()
+        import uuid
+        vault_id = str(uuid.uuid4())
+        client = ServerClient()
+        try:
+            client.setup_vault(vault_id, master_password, duress_password, global_ttl_seconds=int(global_ttl_hours * 3600) if global_ttl_hours else None)
+        except Exception as e:
+            print(f"Server setup failed: {e}")
+            return False
+
+        container_manager.current_vault_id = vault_id
+        container_manager.save_state(vault_id, vfs)
+        
+        audit.log_event("SYSTEM_START", "New vault initialized with server", event_category="system")
+        if container_manager.push_to_cloud():
+            audit.log_event("SYNC_PUSH", "Pushed container state to Google Drive", event_category="system")
         print("Vault initialized and saved to data/container.pkl")
     else:
         # Load cloud state first (conflict resolution)
@@ -503,36 +518,36 @@ def run_zerotracefs() -> bool:
             audit.log_event("SYNC_PULL", "Downloaded newer container state from Google Drive", event_category="system")
 
         state = container_manager.load_state(paths["container_path"])
+        vault_id = state["vault_id"]
         vfs.deserialize(state["vfs_data"])
-        auth.deserialize(state["auth_data"])
-        trigger_engine.deserialize(state["trigger_data"])
-        audit.deserialize(state["audit_data"])
+        container_manager.current_vault_id = vault_id
+
+        client = ServerClient()
 
         while True:
             candidate = prompt_password("Enter vault password: ")
-            auth_result = auth.authenticate(candidate)
-            if auth_result == "granted":
+            auth_result = client.authenticate(vault_id, candidate)
+            status = auth_result.get("status")
+
+            if status == "granted":
                 master_password = candidate
-                audit.log_event("AUTH_SUCCESS", "Vault unlocked successfully", event_category="auth")
+                audit.log_event("AUTH_SUCCESS", "Vault unlocked successfully via Server", event_category="auth")
                 break
-            if auth_result == "duress":
+            if status == "duress":
                 audit.log_event("AUTH_DURESS", "Duress password accepted", event_category="auth", risk_score=100)
-                notifier.notify_security_event("Duress Code Used", "Full vault destruction initiated.")
-                save_everything()
+                notifier.notify_security_event("Duress Code Used", "Full vault destruction initiated on server.")
                 wiper.full_system_wipe(paths["mount_path"], paths["container_path"], paths["control_path"])
                 print("Vault is empty")
                 return False
-            if auth_result == "lockout":
-                audit.log_event("AUTH_FAIL", "Authentication lockout reached", event_category="auth", risk_score=100)
-                notifier.notify_security_event("Lockout", "Authentication lockout reached.")
-                save_everything()
+            if status == "lockout":
+                audit.log_event("AUTH_FAIL", f"Authentication lockout reached: {auth_result.get('detail')}", event_category="auth", risk_score=100)
+                notifier.notify_security_event("Lockout", "Authentication lockout reached on server.")
                 wiper.full_system_wipe(paths["mount_path"], paths["container_path"], paths["control_path"])
                 print("Vault is empty")
                 return False
 
             audit.log_event("AUTH_FAIL", "Incorrect password", event_category="auth", risk_score=50)
-            save_everything()
-            print(f"Wrong password. {auth.get_remaining_attempts()} attempts remaining.")
+            print(f"Wrong password. Server returned: {auth_result.get('detail')}")
 
     sync_engine = SyncEngine(paths["mount_path"], vfs, master_password, encryption=EncryptionEngine())
     
@@ -559,6 +574,20 @@ def run_zerotracefs() -> bool:
                 # In GUI strict mode, the mount is unused and we only sync triggers
                 pass
                 
+            # Perform server heartbeat
+            if 'client' in locals() and client.session_token:
+                hb = client.heartbeat()
+                if hb.get("status") == "active":
+                    server_ts = float(hb.get("server_time", time.time()))
+                    from datetime import datetime, timezone
+                    trigger_engine.server_time = datetime.fromtimestamp(server_ts, tz=timezone.utc)
+                else:
+                    audit.log_event("SERVER_DISCONNECT", f"Heartbeat failed: {hb.get('detail')}", event_category="security", risk_score=90)
+                    if hb.get("status") == "lockout":
+                        wiper.full_system_wipe(paths["mount_path"], paths["container_path"], paths["control_path"])
+                        print("Vault locked by server. Vault destroyed locally.")
+                        break
+                        
             trigger_engine.update_heartbeat()
 
             external_cmd_result = process_external_commands()
@@ -637,7 +666,7 @@ def run_zerotracefs() -> bool:
                 else:
                     file_password = prompt_password(f"Enter password for {fname}: ")
                     try:
-                        content = vfs.read_file(fname, file_password)
+                        content = vfs.read_file_into_memory(fname, file_password)
                         preview = read_preview(fname, content)
                         print("--- FILE CONTENT START ---")
                         print(preview["preview"])
@@ -684,7 +713,7 @@ def run_zerotracefs() -> bool:
                 else:
                     file_password = prompt_password(f"Enter password for {fname}: ")
                     try:
-                        content = vfs.read_file(fname, file_password)
+                        content = vfs.read_file_into_memory(fname, file_password)
                         export_path = destination / fname if destination.is_dir() else destination
                         export_path.parent.mkdir(parents=True, exist_ok=True)
                         export_path.write_bytes(content)

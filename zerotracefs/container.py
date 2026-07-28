@@ -14,14 +14,12 @@ class ContainerManager:
         self.cloud_backend = cloud_backend
         self.revision = 0
 
-    def save_state(self, vfs, auth, triggers, audit) -> None:
+    def save_state(self, vault_id: str, vfs) -> None:
         self.revision += 1
         payload = {
+            "vault_id": vault_id,
             "vfs_data": vfs.serialize(),
-            "auth_data": auth.serialize(),
-            "trigger_data": triggers.serialize(),
-            "audit_data": audit.serialize(),
-            "version": "1.0.0",
+            "version": "2.0.0",
             "revision": self.revision,
             "created_at": utcnow().isoformat(),
         }
@@ -36,7 +34,7 @@ class ContainerManager:
         with path.open("rb") as fh:
             state = pickle.load(fh)
 
-        required = {"vfs_data", "auth_data", "trigger_data", "audit_data"}
+        required = {"vault_id", "vfs_data"}
         missing = sorted(required.difference(state.keys()))
         if missing:
             raise ValueError(f"Container state is missing fields: {', '.join(missing)}")

@@ -38,10 +38,12 @@ class VirtualFileSystem:
         self.files[fname] = FileEntry(ciphertext=ciphertext, iv=iv, salt=salt, metadata=metadata)
         return True
 
-    def read_file(self, filename: str, file_password: str) -> bytes:
+    def read_file_into_memory(self, filename: str, file_password: str) -> bytes:
+        """Securely reads the file into volatile application memory without writing to disk."""
         return self._decrypt_entry(filename, file_password, increment_read=True)
 
     def peek_file(self, filename: str, file_password: str) -> bytes:
+        """Securely previews the file in volatile memory without incrementing read counts."""
         return self._decrypt_entry(filename, file_password, increment_read=False)
 
     def note_file_read(self, filename: str, read_time=None) -> bool:

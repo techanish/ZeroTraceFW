@@ -21,6 +21,9 @@ class SyncEngine:
         self._enable_atime_read_detection = os.getenv("ZTFS_ENABLE_ATIME_READ_DETECTION", "0") == "1"
 
     def populate_mount(self) -> bool:
+        if not self._enable_atime_read_detection:
+            # Memory viewer mode: No local mount population
+            return True
         self.mount_path.mkdir(parents=True, exist_ok=True)
         self.file_hashes = {}
         self.file_access_times = {}
@@ -39,6 +42,9 @@ class SyncEngine:
         return True
 
     def scan_changes(self) -> dict:
+        if not self._enable_atime_read_detection:
+            return {"new": [], "modified": [], "deleted": []}
+            
         file_paths = [p for p in self.mount_path.iterdir() if p.is_file()]
         current_names = [p.name for p in file_paths]
 
@@ -146,6 +152,9 @@ class SyncEngine:
         return changes
 
     def clear_mount(self) -> bool:
+        if not self._enable_atime_read_detection:
+            return True
+            
         if not self.mount_path.exists():
             return True
 

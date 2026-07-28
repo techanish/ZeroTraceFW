@@ -9,9 +9,10 @@ class TriggerEngine:
         self.dead_man_switch_interval = float(dead_man_switch_interval) if dead_man_switch_interval else None
         self.system_start_time = utcnow()
         self.last_heartbeat = utcnow()
+        self.server_time: datetime | None = None
 
     def check_file_triggers(self, file_metadata: dict) -> dict:
-        now = utcnow()
+        now = self.server_time or utcnow()
 
         ttl_seconds = file_metadata.get("ttl_seconds")
         if ttl_seconds is not None:
@@ -32,7 +33,7 @@ class TriggerEngine:
         return {"triggered": False, "reason": ""}
 
     def check_global_triggers(self) -> dict:
-        now = utcnow()
+        now = self.server_time or utcnow()
 
         if self.global_ttl_seconds is not None:
             uptime = max(0.0, (now - self.system_start_time).total_seconds())
@@ -62,7 +63,7 @@ class TriggerEngine:
         return {"global": global_result, "files": file_results}
 
     def update_heartbeat(self) -> None:
-        self.last_heartbeat = utcnow()
+        self.last_heartbeat = self.server_time or utcnow()
 
     def set_global_ttl(self, seconds: float | None) -> None:
         self.global_ttl_seconds = None if not seconds or seconds <= 0 else float(seconds)
