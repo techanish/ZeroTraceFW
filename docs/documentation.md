@@ -1,10 +1,15 @@
 # ZeroTraceFW: A Multi-Layered Zero-Trust Storage Architecture Featuring Hardware-Attested Ephemeral Lifecycles, Cryptographic Self-Destruction, and Cloud-Synchronized Air-Gapping
 
 **Formal Technical Specification & Enterprise Research Whitepaper**  
-**Document Registration:** ZTFW-TR-2026-001-FULL  
-**Classification:** Open Technical Whitepaper / Architectural Reference Manual  
-**Authoring Body:** ZeroTraceFW Core Engineering & Cryptographic Assurance Group  
-**Target Platform:** Windows 10/11 x64, Linux kernel 5.15+, macOS Sonoma+  
+*Document Ref:* `ZTFW-TR-2026-001-DESIGN`  
+*Classification:* **OPEN TECHNICAL WHITEPAPER / ENTERPRISE SPECIFICATION**  
+*Authoring Body:* ZeroTraceFW Core Cryptographic Assurance Group  
+*Target Platforms:* Windows 10/11 x64 | Linux Kernel 5.15+ | macOS Sonoma+  
+
+---
+
+> [!IMPORTANT]  
+> **Security Advisory:** ZeroTraceFW operates on a zero-knowledge architecture. Master passwords and unencrypted byte payloads are never written to disk. Loss of the master password results in permanent, mathematically irreversible data loss.
 
 ---
 
@@ -14,205 +19,115 @@ Static Data-at-Rest Encryption (DARE) solutions—such as Full Disk Encryption (
 
 **ZeroTraceFW** introduces an enterprise-grade, zero-trust, multi-layered ephemeral file protection architecture engineered to enforce transient data access and cryptographic self-destruction. Operating on the principle of *Volatile Ephemerality*, ZeroTraceFW ensures that plaintext data exists exclusively within sandboxed memory allocations during active authorized inspection. All persistence targets—whether local containers or cloud mirrors—store strictly AES-256-GCM encrypted ciphertexts bound to 256-bit salts and 96-bit unique nonces.
 
-This whitepaper presents an exhaustive, publication-grade architectural specification of ZeroTraceFW across its five operational layers:
-1. **Interface & Control Plane:** Native Windows PyQt6 GUI, asynchronous IPC command queues, and headless CLI.
-2. **Policy & Contextual Governance Plane:** Dynamic Risk-Score scoring, RBAC matrices, regex-heuristic AI document classification, and dynamic visual watermarking overlays.
-3. **Cryptographic Storage & VFS Plane:** VirtualFileSystem abstraction, AES-256-GCM AEAD encryption, and PBKDF2-HMAC-SHA256 (600,000 iterations) key stretching.
-4. **Hardware & Runtime Security Plane:** Native Rust security engine (`ztfs_engine`), Win32 PEB debugger detection, hypervisor footprint verification, and DOD 5220.22-M 4-pass anti-forensic physical overwriting.
-5. **Cloud Synchronization & Fleet Management Plane:** Resilient zero-knowledge Google Drive REST API integration and FastAPI Central Command Server key escrow.
+```
++---------------------------------------------------------------------------------------------------+
+|                                  ZEROTRACEFW HIGHLIGHT ARCHITECTURE                               |
++---------------------------------------------------------------------------------------------------+
+|  [ Interface Plane ] ---> [ Policy & RBAC ] ---> [ AES-256-GCM Engine ] ---> [ Hardware Attest ]  |
+|         |                        |                       |                          |             |
+|  PyQt6 Native App       Dynamic Geo/Time       600k-Iteration PBKDF2      PEB Debug & Hypervisor  |
+|  Windows Context Menu   Risk-Score Matrix      32B Salt + 12B Nonce       DOD 4-Pass Sanitization |
++---------------------------------------------------------------------------------------------------+
+```
 
 ---
 
 ## Table of Contents
 
 1. [Introduction & Security Model](#1-introduction--security-model)  
-   1.1 [The Vulnerability of Static Storage Systems](#11-the-vulnerability-of-static-storage-systems)  
-   1.2 [The ZeroTraceFW Ephemeral Storage Paradigm](#12-the-zerotracefw-ephemeral-storage-paradigm)  
-   1.3 [Threat Model & Adversarial Capabilities](#13-threat-model--adversarial-capabilities)  
-   1.4 [Design Guarantees & Non-Goals](#14-design-guarantees--non-goals)  
 2. [Five-Layer System Architecture](#2-five-layer-system-architecture)  
-   2.1 [Layer 1: Interface & Control Plane](#21-layer-1-interface--control-plane)  
-   2.2 [Layer 2: Policy, RBAC & Governance Plane](#22-layer-2-policy-rbac--governance-plane)  
-   2.3 [Layer 3: Cryptographic Storage & Virtual File System (VFS)](#23-layer-3-cryptographic-storage--virtual-file-system-vfs)  
-   2.4 [Layer 4: Hardware & Runtime Security Verifier (Rust Security Engine)](#24-layer-4-hardware--runtime-security-verifier-rust-security-engine)  
-   2.5 [Layer 5: Cloud Synchronization & Central Command Plane](#25-layer-5-cloud-synchronization--central-command-plane)  
 3. [Module-by-Module Codebase Architecture](#3-module-by-module-codebase-architecture)  
-   3.1 [Core Runtime Engine (`zerotracefw/runtime.py`)](#31-core-runtime-engine-zerotracefwruntimepy)  
-   3.2 [Virtual Filesystem Abstraction (`zerotracefw/filesystem.py`)](#32-virtual-filesystem-abstraction-zerotracefwfilesystempy)  
-   3.3 [Cryptographic Primitives (`zerotracefw/encryption.py` & `key_derivation.py`)](#33-cryptographic-primitives-zerotracefwencryptionpy--key_derivationpy)  
-   3.4 [Anti-Forensic Wiper (`zerotracefw/wipe.py`)](#34-anti-forensic-wiper-zerotracefwwipepy)  
-   3.5 [Hardware Security Verifier (`zerotracefw/security_checks.py`)](#35-hardware-security-verifier-zerotracefwsecurity_checkspy)  
-   3.6 [AI Classifier & Heuristics (`zerotracefw/ai_classifier.py`)](#36-ai-classifier--heuristics-zerotracefwai_classifierpy)  
-   3.7 [Policy Engine & RBAC (`zerotracefw/policy_engine.py` & `rbac.py`)](#37-policy-engine--rbac-zerotracefwpolicy_enginepy--rbacpy)  
-   3.8 [Office OpenXML Document Parser (`zerotracefw/office_parser.py`)](#38-office-openxml-document-parser-zerotracefwoffice_parserpy)  
-   3.9 [Cloud Sync Subsystem (`zerotracefw/cloud/gdrive.py`)](#39-cloud-sync-subsystem-zerotracefwcloudgdrivepy)  
-   3.10 [Central Command REST API (`server/main.py`)](#310-central-command-rest-api-servermainpy)  
 4. [Cryptographic Formalism & Key Management](#4-cryptographic-formalism--key-management)  
-   4.1 [Primitive Selection & Mathematical Rationale](#41-primitive-selection--mathematical-rationale)  
-   4.2 [Key Derivation Function (KDF) Formalism](#42-key-derivation-function-kdf-formalism)  
-   4.3 [Authenticated Encryption (AES-256-GCM) Formalism](#43-authenticated-encryption-aes-256-gcm-formalism)  
-   4.4 [Key Material Lifecycle & Zeroization in Memory](#44-key-material-lifecycle--zeroization-in-memory)  
 5. [Autonomous Trigger Engine & Ephemeral Lifecycles](#5-autonomous-trigger-engine--ephemeral-lifecycles)  
-   5.1 [Per-File Ephemeral Rules](#51-per-file-ephemeral-rules)  
-   5.2 [Global Vault & Operational Safety Rules](#52-global-vault--operational-safety-rules)  
-   5.3 [Duress Credential Purging Protocol](#53-duress-credential-purging-protocol)  
 6. [Anti-Forensic Sanitization & Physical Overwrite Protocols](#6-anti-forensic-sanitization--physical-overwrite-protocols)  
-   6.1 [Multi-Pass Overwrite Algorithm (DOD 5220.22-M Hybrid)](#61-multi-pass-overwrite-algorithm-dod-522022-m-hybrid)  
-   6.2 [Volatile RAM Zeroization Primitives](#62-volatile-ram-zeroization-primitives)  
-   6.3 [Storage Media Considerations (SSD Wear-Leveling & TRIM)](#63-storage-media-considerations-ssd-wear-leveling--trim)  
 7. [AI Document Classification & Dynamic Governance](#7-ai-document-classification--dynamic-governance)  
-   7.1 [Heuristic Classification Engine](#71-heuristic-classification-engine)  
-   7.2 [Dynamic Forensic Watermarking Overlay](#72-dynamic-forensic-watermarking-overlay)  
-   7.3 [Document Content Renderers (OpenXML, PDF, Media)](#73-document-content-renderers-openxml-pdf-media)  
 8. [Central Command Server & Enterprise Synchronization](#8-central-command-server--enterprise-synchronization)  
-   8.1 [REST API Endpoints & Payload Schemas](#81-rest-api-endpoints--payload-schemas)  
-   8.2 [Cloud Persistence & Conflict Resolution](#82-cloud-persistence--conflict-resolution)  
-9. [Comprehensive Threat Analysis (STRIDE / DREAD)](#9-comprehensive-threat-analysis-stride--dread)  
-10. [Verification, Benchmarks & Empirical Testing](#10-verification-benchmarks--empirical-testing)  
-11. [References & Cryptographic Standards](#11-references--cryptographic-standards)  
+9. [STRIDE / DREAD Threat Matrix](#9-stride--dread-threat-matrix)  
+10. [Verification, Benchmarks & References](#10-verification-benchmarks--references)  
 
 ---
 
 ## 1. Introduction & Security Model
 
 ### 1.1 The Vulnerability of Static Storage Systems
-Traditional enterprise storage architectures rely on disk-level or folder-level encryption to meet compliance standards (e.g., FIPS 140-3, HIPAA, GDPR). However, static encryption suffers from structural limitations:
-- **Mount Exposure Window:** Once an encrypted volume is unlocked by an authorized credentials entry, the operating system transparently decrypts all requested blocks. Malicious background processes, compromised DLLs, or compromised kernel drivers read plaintext directly.
-- **Persistence After Exposure:** Files written to disk remain readable until explicitly unmounted or powered down.
-- **Lack of Access Ephemerality:** Standard storage drivers cannot enforce "read $N$ times and destroy", "self-destruct at UTC 14:00", or "wipe if a debugger attaches".
-- **Coercion Susceptibility:** Physical seizure allows adversaries to force password disclosure under duress, compromising all stored assets.
 
-### 1.2 The ZeroTraceFW Ephemeral Storage Paradigm
-ZeroTraceFW redefines sensitive file handling by enforcing a **Zero-Knowledge, Ephemeral Vault Protocol**. Files imported into ZeroTraceFW do not exist on the local file system in plaintext. Instead, they are transformed into encrypted byte streams and cataloged inside a unified container structure (`data/container.pkl`). 
+Traditional enterprise storage architectures rely on disk-level or folder-level encryption to meet compliance standards (e.g., FIPS 140-3, HIPAA, GDPR). However, static encryption suffers from structural limitations:
+
+- 🔓 **Mount Exposure Window:** Once an encrypted volume is unlocked by an authorized credentials entry, the operating system transparently decrypts all requested blocks.
+- 💾 **Persistence After Exposure:** Files written to disk remain readable until explicitly unmounted or powered down.
+- ⏳ **Lack of Access Ephemerality:** Standard storage drivers cannot enforce "read $N$ times and destroy" or "wipe if a debugger attaches".
+- 🛡️ **Coercion Susceptibility:** Physical seizure allows adversaries to force password disclosure under duress.
+
+> [!WARNING]  
+> Standard OS unlinking (`remove()` or `unlink()`) only deletes filesystem table references. The actual raw sector data remains fully recoverable on solid-state drives (SSDs) and magnetic media using standard forensic suites like Autopsy or FTK Imager until physically overwritten.
+
+### 1.2 Threat Model & Adversarial Matrix
 
 ```
-                                ZEROTRACEFW ARCHITECTURE OVERVIEW
-
 +---------------------------------------------------------------------------------------------------+
-|                                     USER INTERFACE LAYER                                          |
-|                                                                                                   |
-|   +--------------------------+  +--------------------------+  +-------------------------------+   |
-|   |  PyQt6 Windows GUI       |  |  Interactive CLI Shell   |  |  Windows Context Menu Queue   |   |
-|   |  (gui_app.py)            |  |  (zerotracefw/ui.py)     |  |  (tools/ztfs_cmd.ps1)         |   |
-|   +--------------------------+  +--------------------------+  +-------------------------------+   |
-+---------------------------------------------------------------------------------------------------+
-                                                  |
-                                                  v
-+---------------------------------------------------------------------------------------------------+
-|                                  POLICY & GOVERNANCE LAYER                                        |
-|                                                                                                   |
-|   +--------------------------+  +--------------------------+  +-------------------------------+   |
-|   |  Policy Engine           |  |  Role-Based Access (RBAC)|  |  Regex AI Classifier          |   |
-|   |  (policy_engine.py)      |  |  (rbac.py)               |  |  (ai_classifier.py)           |   |
-|   +--------------------------+  +--------------------------+  +-------------------------------+   |
-+---------------------------------------------------------------------------------------------------+
-                                                  |
-                                                  v
-+---------------------------------------------------------------------------------------------------+
-|                              CRYPTOGRAPHIC STORAGE & VFS LAYER                                    |
-|                                                                                                   |
-|   +--------------------------+  +--------------------------+  +-------------------------------+   |
-|   |  Virtual File System     |  |  AES-256-GCM Encryption  |  |  PBKDF2-HMAC-SHA256 KDF       |   |
-|   |  (filesystem.py)         |  |  (encryption.py)         |  |  (key_derivation.py)          |   |
-|   +--------------------------+  +--------------------------+  +-------------------------------+   |
-+---------------------------------------------------------------------------------------------------+
-                                                  |
-                                                  v
-+---------------------------------------------------------------------------------------------------+
-|                               HARDWARE & RUNTIME SECURITY LAYER                                   |
-|                                                                                                   |
-|   +--------------------------+  +--------------------------+  +-------------------------------+   |
-|   |  Environment Verifier    |  |  Rust Security Engine    |  |  DOD 4-Pass Secure Wiper      |   |
-|   |  (security_checks.py)    |  |  (ztfs_engine)           |  |  (wipe.py)                    |   |
-|   +--------------------------+  +--------------------------+  +-------------------------------+   |
-+---------------------------------------------------------------------------------------------------+
-                                                  |
-                                                  v
-+---------------------------------------------------------------------------------------------------+
-|                             PERSISTENCE & CLOUD SYNCHRONIZATION LAYER                             |
-|                                                                                                   |
-|   +--------------------------+  +--------------------------+  +-------------------------------+   |
-|   |  Container Manager       |  |  Google Drive REST Sync  |  |  Central FastAPI Server       |   |
-|   |  (container.py)          |  |  (cloud/gdrive.py)       |  |  (server/main.py)             |   |
-|   +--------------------------+  +--------------------------+  +-------------------------------+   |
-+---------------------------------------------------------------------------------------------------+
+|                                   ADVERSARIAL THREAT MODEL MATRIX                                 |
++---------------------+-----------------------------------+-----------------------------------------+
+| Adversary Target    | Attack Vector                     | ZeroTraceFW Mitigation Strategy         |
++---------------------+-----------------------------------+-----------------------------------------+
+| Offline Storage     | Storage media theft / cloning     | AES-256-GCM Ciphertext; PBKDF2 (600k)   |
+| Physical Coercion   | Forced password disclosure        | Duress Hash (Purges storage & server)   |
+| Process Inspection  | Attaching x64dbg / Cheat Engine   | Native Win32 PEB & Debug API Checks     |
+| Virtual Sandbox     | Running inside VMware / QEMU      | Hypervisor MAC & Registry Checks        |
+| Cold Boot Attack    | Dumping RAM post-execution        | C-Level `memset_s` Zeroization Routine  |
+| Network Sniffing    | MitM on Cloud Sync Traffic        | TLS 1.3 & Zero-Knowledge Client Cipher  |
++---------------------+-----------------------------------+-----------------------------------------+
 ```
 
 ---
 
 ## 2. Five-Layer System Architecture
 
-### 2.1 Layer 1: Interface & Control Plane
-- **PyQt6 GUI Application (`gui_app.py`):** Integrates native `windowsvista` widgets, status telemetry, real-time event logs, and Google OAuth2 profile management.
-- **Universal Secure Viewer (`UniversalViewerDialog`):** Sandboxed reader supporting OpenXML (DOCX, XLSX, PPTX), PDF, Images, and Text with built-in copy/print protection and dynamic rendering.
-- **CLI Subsystem (`zerotracefw/ui.py`):** Headless interface for server deployments and automated administrative tasks.
-- **Windows Explorer Context Menu Integration (`tools/ztfs_cmd.ps1`):** Asynchronous file-system command queue architecture allowing users to encrypt, decrypt, or wipe files directly from the Windows context menu by writing payload requests into `.zerotracefw/commands/`.
-
-### 2.2 Layer 2: Policy & Governance Plane
-- **`AccessControl` (`zerotracefw/rbac.py`):** Manages Role-Based Access Control (RBAC) across four roles: `OWNER`, `EDITOR`, `VIEWER`, and `AUDITOR`.
-- **`PolicyEngine` (`zerotracefw/policy_engine.py`):** Evaluates multi-factor contextual rules including time-of-day access windows (`allowed_hours`), IP subnet filtering, geo-fencing requirements, and dynamic risk-score computation (0–100 scale).
-- **`AIClassifier` (`zerotracefw/ai_classifier.py`):** Regex-heuristic content analyzer that inspects raw document streams for PII (SSNs, emails), financial data (credit cards, IBANs), legal clauses, and governmental classification markers.
-- **`DynamicWatermark` (`zerotracefw/watermark.py`):** Injects non-destructive, forensic visual watermarks (User ID, Session ID, Timestamp) into image streams and HTML overlays.
-
-### 2.3 Layer 3: Cryptographic Storage & VFS Plane
-- **`VirtualFileSystem` (`zerotracefw/filesystem.py`):** In-memory catalog mapping normalized filenames to `FileEntry` objects containing encrypted byte payloads, salt material, nonces, and metadata headers.
-- **`EncryptionEngine` (`zerotracefw/encryption.py`):** High-level abstraction that delegates encryption/decryption to `ztfs_engine` (AES-256-GCM) or PyCryptodome/cryptography hazmat fallbacks.
-- **`KeyDerivation` (`zerotracefw/key_derivation.py`):** Handles key stretching using PBKDF2-HMAC-SHA256 with 600,000 iterations and 32-byte salts.
-
-### 2.4 Layer 4: Hardware & Runtime Security Plane
-- **`EnvironmentVerifier` (`zerotracefw/security_checks.py`):** Invokes C/Rust native bindings (`ztfs_engine`) to perform Win32 API checks (`IsDebuggerPresent`, `CheckRemoteDebuggerPresent`, PEB flag analysis), detect hypervisor artifacts, and verify OS kernel integrity.
-- **`SecureWiper` (`zerotracefw/wipe.py`):** Executes multi-pass file overwriting routines (3 random bytes passes + 1 zero-fill pass) and zeroizes memory allocations.
-
-### 2.5 Layer 5: Cloud & Persistence Synchronization
-- **`ContainerManager` (`zerotracefw/container.py`):** Serializes the VirtualFileSystem state into `data/container.pkl` with revision tracking.
-- **`GoogleDriveBackend` (`zerotracefw/cloud/gdrive.py`):** OAuth2-authenticated REST client handling automated cloud backup of container states with connection-reset retry loops.
-- **`ServerClient` (`zerotracefw/client_api.py`):** Interface to the centralized FastAPI policy server.
-
----
-
-## 3. Module-by-Module Codebase Architecture
-
 ```
 +---------------------------------------------------------------------------------------------------+
-|                                 MODULE INTERACTION MATRIX                                         |
-+------------------------+-------------------------------+------------------------------------------+
-| Module Name            | Primary Responsibility        | Dependencies                             |
-+------------------------+-------------------------------+------------------------------------------+
-| `zerotracefw/runtime.py` | Engine Orchestration Loop     | `vfs`, `auth`, `triggers`, `audit`, `wiper`|
-| `zerotracefw/filesystem.py`| In-Memory Virtual FS        | `encryption.py`, `key_derivation.py`     |
-| `zerotracefw/encryption.py`| AES-256-GCM Cipher Engine   | `ztfs_engine` (Rust) / `cryptography`    |
-| `zerotracefw/key_derivation.py`| PBKDF2 Key Stretching  | `hashlib`, `hmac`, `ztfs_engine`         |
-| `zerotracefw/wipe.py`  | 4-Pass DOD Physical Wiper     | `os.urandom`, `gc`, `ztfs_engine`        |
-| `zerotracefw/security_checks.py`| Environment Verifier | `ztfs_engine`, `json`, `logging`         |
-| `zerotracefw/ai_classifier.py`| Sensitive Heuristics   | `re`, `dataclasses`                      |
-| `zerotracefw/policy_engine.py`| Policy & Risk Evaluator| `rbac.py`, `datetime`                    |
-| `zerotracefw/rbac.py`  | Role Access Control Matrix    | `enum`, `dataclasses`                    |
-| `zerotracefw/office_parser.py`| OpenXML (DOCX/XLSX/PPTX)| `zipfile`, `xml.etree.ElementTree`       |
-| `zerotracefw/cloud/gdrive.py`| Google Drive REST Sync   | `google-api-python-client`, `requests`   |
-| `server/main.py`       | FastAPI Central Server        | `fastapi`, `sqlite3`, `pydantic`         |
-+------------------------+-------------------------------+------------------------------------------+
+|                                     FIVE-LAYER SYSTEM DIAGRAM                                     |
++---------------------------------------------------------------------------------------------------+
+|                                                                                                   |
+|  [ LAYER 1: INTERFACE PLANE ]                                                                    |
+|  PyQt6 Windows Control Panel | Headless CLI Shell | Windows Context Menu Queue                    |
+|                                         |                                                         |
+|                                         v                                                         |
+|  [ LAYER 2: POLICY & GOVERNANCE PLANE ]                                                          |
+|  PolicyEngine (Time/Geo/Risk) | AccessControl (RBAC Matrix) | Regex AI Classifier                  |
+|                                         |                                                         |
+|                                         v                                                         |
+|  [ LAYER 3: CRYPTOGRAPHIC STORAGE & VFS PLANE ]                                                  |
+|  VirtualFileSystem Catalog | AES-256-GCM EncryptionEngine | PBKDF2-HMAC-SHA256 KeyDerivation        |
+|                                         |                                                         |
+|                                         v                                                         |
+|  [ LAYER 4: HARDWARE & RUNTIME SECURITY PLANE ]                                                  |
+|  EnvironmentVerifier | Native Rust Security Engine (`ztfs_engine`) | DOD 4-Pass Secure Wiper    |
+|                                         |                                                         |
+|                                         v                                                         |
+|  [ LAYER 5: PERSISTENCE & CLOUD PLANE ]                                                          |
+|  ContainerManager (`container.pkl`) | Google Drive REST Sync | Central Command Server (FastAPI)   |
+|                                                                                                   |
++---------------------------------------------------------------------------------------------------+
 ```
 
 ---
 
-## 4. Cryptographic Formalism & Key Management
+## 3. Cryptographic Formalism & Key Management
 
-### 4.1 Mathematical Key Derivation Specification
+### 3.1 Mathematical Key Derivation Specification
 
-ZeroTraceFW uses PBKDF2 with HMAC-SHA256 to derive a 256-bit symmetric key $K_{\text{file}}$:
+ZeroTraceFW uses **PBKDF2-HMAC-SHA256** to derive a 256-bit symmetric key $K_{\text{file}}$ from a password string $P$ and salt $S$:
 
-$$DK = \text{PBKDF2}(PRF, Password, Salt, c, dkLen)$$
+$$DK = \text{PBKDF2}(\text{HMAC-SHA256}, P, S, 600000, 32)$$
 
-Where:
-- $PRF = \text{HMAC-SHA256}$
-- $Password = \text{UTF-8 encoded master password string}$
-- $Salt \in_R \{0,1\}^{256}$ (32 random bytes)
-- $c = 600,000$ (iteration count)
-- $dkLen = 32$ (256 bits)
+$$T_i = U_1 \oplus U_2 \oplus \dots \oplus U_c$$
+
+$$U_1 = \text{HMAC-SHA256}(P, S \parallel \text{INT\_32\_BE}(i))$$
+
+$$U_j = \text{HMAC-SHA256}(P, U_{j-1})$$
 
 ```
 +---------------------------------------------------------------------------------------------------+
-|                         PBKDF2-HMAC-SHA256 DERIVATION FLOW                                        |
+|                         PBKDF2-HMAC-SHA256 DERIVATION FLOW SCHEMATIC                              |
 +---------------------------------------------------------------------------------------------------+
 |                                                                                                   |
 |  Password + Salt + BlockIndex(1) ---> HMAC-SHA256 ---> U_1                                        |
@@ -227,15 +142,22 @@ Where:
 +---------------------------------------------------------------------------------------------------+
 ```
 
-### 4.2 Authenticated Encryption (AES-256-GCM)
+### 3.2 Authenticated Encryption (AES-256-GCM)
 
-Galois/Counter Mode (GCM) provides confidentiality and authentication tag verification. Decryption verifies the tag $T \in \{0,1\}^{128}$ before returning plaintext.
+Given plaintext payload $M \in \{0,1\}^*$ and 96-bit nonce $IV \in \{0,1\}^{96}$:
 
-$$M = \begin{cases} \text{AES-256-GCM-Decrypt}(K, IV, C, T) & \text{if } T \text{ is valid} \\ \text{ERROR\_AUTHENTICATION\_FAILED} & \text{otherwise} \end{cases}$$
+$$(C, T) = \text{AES-256-GCM-Encrypt}(K, IV, M)$$
+
+Decryption checks authentication tag $T \in \{0,1\}^{128}$:
+
+$$M = \begin{cases} \text{AES-256-GCM-Decrypt}(K, IV, C, T) & \text{if } T \text{ is verified} \\ \text{AUTH\_FAILURE\_EXCEPTION} & \text{otherwise} \end{cases}$$
+
+> [!NOTE]  
+> If an attacker modifies even a single bit of the stored ciphertext $C$ or nonce $IV$, AES-GCM verification fails immediately and returns a cryptographic authentication error without attempting plaintext construction.
 
 ---
 
-## 5. Autonomous Trigger Engine & Ephemeral Lifecycles
+## 4. Autonomous Trigger Engine & Ephemeral Lifecycles
 
 ```
 +---------------------------------------------------------------------------------------------------+
@@ -254,9 +176,7 @@ $$M = \begin{cases} \text{AES-256-GCM-Decrypt}(K, IV, C, T) & \text{if } T \text
 
 ---
 
-## 6. Anti-Forensic Sanitization & Physical Overwrite Protocols
-
-### 6.1 Multi-Pass DOD 5220.22-M Hybrid Algorithm
+## 5. Anti-Forensic Sanitization & Physical Overwrite Protocols
 
 ```
 +---------------------------------------------------------------------------------------------------+
@@ -292,9 +212,12 @@ $$M = \begin{cases} \text{AES-256-GCM-Decrypt}(K, IV, C, T) & \text{if } T \text
 +---------------------------------------------------------------------------------------------------+
 ```
 
+> [!CAUTION]  
+> High-risk operations (such as Duress Password authentication or failed auth lockouts) trigger an immediate, un-prompted invocation of `SecureWiper.full_system_wipe()`, obliterating all local metadata, container states, and volatile decryption keys.
+
 ---
 
-## 7. AI Document Classification & Dynamic Governance
+## 6. AI Document Classification & Dynamic Governance
 
 ```
 +---------------------------------------------------------------------------------------------------+
@@ -314,7 +237,7 @@ $$M = \begin{cases} \text{AES-256-GCM-Decrypt}(K, IV, C, T) & \text{if } T \text
 
 ---
 
-## 8. Central Command Server & Enterprise Synchronization
+## 7. Central Command Server & Enterprise Synchronization
 
 ```
 +-----------------------+                        +-----------------------+
@@ -340,7 +263,7 @@ $$M = \begin{cases} \text{AES-256-GCM-Decrypt}(K, IV, C, T) & \text{if } T \text
 
 ---
 
-## 9. STRIDE / DREAD Risk Assessment Matrix
+## 8. STRIDE / DREAD Risk Assessment Matrix
 
 ```
 +---------------------------------------------------------------------------------------------------+
@@ -359,7 +282,7 @@ $$M = \begin{cases} \text{AES-256-GCM-Decrypt}(K, IV, C, T) & \text{if } T \text
 
 ---
 
-## 10. Verification, Benchmarks & Empirical Testing
+## 9. Verification, Benchmarks & References
 
 ```
 +---------------------------------------------------------------------------------------------------+
@@ -375,15 +298,11 @@ $$M = \begin{cases} \text{AES-256-GCM-Decrypt}(K, IV, C, T) & \text{if } T \text
 +------------------------------------+--------------------------+-----------------------------------+
 ```
 
----
-
-## 11. References & Cryptographic Standards
-
-1. **NIST SP 800-38D:** *Recommendation for Block Cipher Modes of Operation: Galois/Counter Mode (GCM) and GMAC.*  
-2. **NIST SP 800-132:** *Recommendation for Password-Based Key Derivation: Part 1: Storage Applications (PBKDF2).*  
-3. **DOD 5220.22-M:** *National Industrial Security Program Operating Manual (NISPOM) - Sanitization Standards.*  
-4. **RFC 7519:** *JSON Web Token (JWT) Architecture and Security Guidelines.*  
-5. **OWASP Cryptographic Storage Cheat Sheet (2023):** *Key Stretching & Derivation Iteration Recommendations.*  
+### Standards & References
+1. **NIST SP 800-38D:** *Recommendation for Block Cipher Modes of Operation: Galois/Counter Mode (GCM) and GMAC.*
+2. **NIST SP 800-132:** *Recommendation for Password-Based Key Derivation: Part 1: Storage Applications (PBKDF2).*
+3. **DOD 5220.22-M:** *National Industrial Security Program Operating Manual (NISPOM) - Sanitization Standards.*
+4. **RFC 7519:** *JSON Web Token (JWT) Architecture and Security Guidelines.*
 
 ---
-*ZeroTraceFW Full Technical Architecture Documentation — Complete.*
+*ZeroTraceFW Designed & Published Technical Whitepaper.*
