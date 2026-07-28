@@ -1,0 +1,10 @@
+{
+  "timestamp": "2026-07-01T08:52:39.556209Z",
+  "source_file": "cmd_20260701_142237473957_58d368bd.json",
+  "status": "ok",
+  "message": "Full vault destruction complete",
+  "payload": {
+    "action": "destroy-all"
+  },
+  "data": null
+}

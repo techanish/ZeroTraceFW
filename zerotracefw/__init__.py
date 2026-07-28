@@ -1,4 +1,4 @@
-"""ZeroTraceFS Python implementation."""
+"""ZeroTraceFW Python implementation."""
 
 from .audit import AuditLogger
 from .auth import AuthManager

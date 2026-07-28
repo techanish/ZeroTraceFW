@@ -23,10 +23,10 @@ if getattr(sys, 'frozen', False):
 else:
     PROJECT_ROOT = Path(__file__).parent.resolve()
 os.chdir(str(PROJECT_ROOT))
-COMMANDS_DIR = PROJECT_ROOT / ".zerotracefs" / "commands"
-PROCESSED_DIR = PROJECT_ROOT / ".zerotracefs" / "processed"
+COMMANDS_DIR = PROJECT_ROOT / ".zerotracefw" / "commands"
+PROCESSED_DIR = PROJECT_ROOT / ".zerotracefw" / "processed"
 MOUNT_DIR = PROJECT_ROOT / "mount"
-STATUS_FILE = PROJECT_ROOT / ".zerotracefs" / "status.json"
+STATUS_FILE = PROJECT_ROOT / ".zerotracefw" / "status.json"
 CONTAINER_FILE = PROJECT_ROOT / "data" / "container.pkl"
 
 COMMANDS_DIR.mkdir(parents=True, exist_ok=True)
@@ -39,9 +39,9 @@ try:
 except ImportError:
     HAS_PYMUPDF = False
 
-from zerotracefs.encryption import EncryptionEngine
-from zerotracefs.key_derivation import KeyDerivation
-from zerotracefs.watermark import DynamicWatermark
+from zerotracefw.encryption import EncryptionEngine
+from zerotracefw.key_derivation import KeyDerivation
+from zerotracefw.watermark import DynamicWatermark
 
 from PyQt6.QtWidgets import QHBoxLayout, QSlider
 
@@ -52,7 +52,7 @@ class UniversalViewerDialog(QDialog):
         self.content_bytes = content_bytes
         self.zoom_level = 100
         
-        self.setWindowTitle(f"ZeroTraceFS Secure Viewer - {filename}")
+        self.setWindowTitle(f"ZeroTraceFW Secure Viewer - {filename}")
         self.resize(1024, 768)
         self.setWindowFlags(self.windowFlags() | Qt.WindowType.WindowMaximizeButtonHint)
         self.setStyleSheet("background-color: #0f172a; color: #e2e8f0;")
@@ -279,7 +279,7 @@ class UniversalViewerDialog(QDialog):
 
     def render_openxml(self):
         try:
-            from zerotracefs.office_parser import parse_openxml_to_html
+            from zerotracefw.office_parser import parse_openxml_to_html
             html = parse_openxml_to_html(str(self.filename), self.content_bytes)
         except Exception as e:
             html = f"<p style='color:red'>Failed to parse XML container natively: {e}</p><br><p>Fallback to binary:</p><br><p>"
@@ -382,13 +382,13 @@ class UniversalViewerDialog(QDialog):
         
         reply = QMessageBox.warning(
             self, "Security Notice", 
-            "ZeroTraceFS will securely drop a temporary file and launch your system viewer. "
+            "ZeroTraceFW will securely drop a temporary file and launch your system viewer. "
             "A background watcher will aggressively overwrite and delete the file the millisecond you close it in the viewer. Proceed?", 
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
         if reply == QMessageBox.StandardButton.Yes:
             # Drop to open_temp
-            temp_dir = (PROJECT_ROOT / ".zerotracefs") / "open_temp"
+            temp_dir = (PROJECT_ROOT / ".zerotracefw") / "open_temp"
             temp_dir.mkdir(parents=True, exist_ok=True)
             import uuid
             stamp = uuid.uuid4().hex[:8]
@@ -468,10 +468,10 @@ class StyledButton(QPushButton):
         return f"#{r:02x}{g:02x}{b:02x}"
 
 
-class ZeroTraceFSControlPanel(QMainWindow):
+class ZeroTraceFWControlPanel(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("ZeroTraceFS Control Panel")
+        self.setWindowTitle("ZeroTraceFW Control Panel")
         self.setFixedSize(1000, 800)
         self.seen_processed = set()
         
@@ -490,7 +490,7 @@ class ZeroTraceFSControlPanel(QMainWindow):
         self.setCentralWidget(central_widget)
 
         # Title
-        title_label = QLabel("ZeroTraceFS Control Panel", central_widget)
+        title_label = QLabel("ZeroTraceFW Control Panel", central_widget)
         title_label.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
         title_label.setStyleSheet("color: #38bdf8;")
         title_label.move(25, 20)
@@ -643,11 +643,11 @@ class ZeroTraceFSControlPanel(QMainWindow):
         self.engine_process.readyReadStandardError.connect(self.handle_stderr)
         self.engine_process.finished.connect(self.handle_engine_finished)
 
-        self.write_log("Control panel ready. ZeroTraceFS GUI enhanced version.", "success")
+        self.write_log("Control panel ready. ZeroTraceFW GUI enhanced version.", "success")
         self.write_log(f"Project root: {PROJECT_ROOT}", "info")
         
         # Cleanup any lingering temporary files
-        temp_dir = PROJECT_ROOT / ".zerotracefs" / "open_temp"
+        temp_dir = PROJECT_ROOT / ".zerotracefw" / "open_temp"
         if temp_dir.exists():
             for f in temp_dir.glob("*"):
                 try: f.unlink()
@@ -1083,8 +1083,8 @@ if __name__ == "__main__":
         server_thread.start()
         time.sleep(1)
 
-        from main import run_zerotracefs
-        run_zerotracefs()
+        from main import run_zerotracefw
+        run_zerotracefw()
         sys.exit(0)
         
     app = QApplication(sys.argv)
@@ -1095,6 +1095,6 @@ if __name__ == "__main__":
     palette.setColor(QPalette.ColorRole.WindowText, QColor(226, 232, 240))
     app.setPalette(palette)
     
-    window = ZeroTraceFSControlPanel()
+    window = ZeroTraceFWControlPanel()
     window.show()
     sys.exit(app.exec())

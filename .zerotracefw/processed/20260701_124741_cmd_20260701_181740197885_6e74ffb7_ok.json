@@ -1,0 +1,10 @@
+{
+  "timestamp": "2026-07-01T12:47:41.440110Z",
+  "source_file": "cmd_20260701_181740197885_6e74ffb7.json",
+  "status": "ok",
+  "message": "Secure shutdown complete",
+  "payload": {
+    "action": "quit"
+  },
+  "data": null
+}

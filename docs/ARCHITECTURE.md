@@ -1,21 +1,21 @@
-# ZeroTraceFS Architecture
+# ZeroTraceFW Architecture
 
 ## 1) Three-Layer Architecture
 
-ZeroTraceFS is structured into three layers to separate interface, policy/orchestration, and cryptographic persistence.
+ZeroTraceFW is structured into three layers to separate interface, policy/orchestration, and cryptographic persistence.
 
 ```text
 +------------------------------------------------------------------+
 | Layer 1: Interface                                                |
-| main.py, zerotracefs/ui.py                                        |
+| main.py, zerotracefw/ui.py                                        |
 | - Session lifecycle, command loop, status, prompts               |
 +------------------------------------------------------------------+
 | Layer 2: Control + Policy                                         |
-| zerotracefs/auth.py, zerotracefs/sync.py, zerotracefs/triggers.py, zerotracefs/audit.py |
+| zerotracefw/auth.py, zerotracefw/sync.py, zerotracefw/triggers.py, zerotracefw/audit.py |
 | - Authentication, sync decisions, trigger evaluation, audit trail |
 +------------------------------------------------------------------+
 | Layer 3: Crypto + Storage                                         |
-| zerotracefs/encryption.py, zerotracefs/key_derivation.py, zerotracefs/filesystem.py, zerotracefs/container.py, zerotracefs/wipe.py |
+| zerotracefw/encryption.py, zerotracefw/key_derivation.py, zerotracefw/filesystem.py, zerotracefw/container.py, zerotracefw/wipe.py |
 | - AES/PBKDF2, encrypted file entries, persistence, secure wipe    |
 +------------------------------------------------------------------+
 ```
@@ -79,13 +79,13 @@ AuditLogger records TRIGGER_FIRE and DESTRUCTION/WIPE_COMPLETE
 File Explorer right-click action
         |
         v
-tools/ztfs_cmd.ps1 writes command JSON into .zerotracefs/commands
+tools/ztfs_cmd.ps1 writes command JSON into .zerotracefw/commands
         |
         v
 main.py loop reads and executes queued command
         |
         v
-Result JSON written to .zerotracefs/processed
+Result JSON written to .zerotracefw/processed
 ```
 
 ### E) Runtime Status Snapshot Path
@@ -97,7 +97,7 @@ main.py cycle
 Build runtime snapshot (files, auth counters, trigger timers, command queue state)
         |
         v
-Write .zerotracefs/status.json
+Write .zerotracefw/status.json
         |
         v
 Control panel and external tooling read status for live UI
@@ -217,6 +217,6 @@ Persistence characteristics:
 
 - The runtime loop is cooperative in a single Python process.
 - Sync and trigger checks execute on each cycle and around command handling.
-- External command ingestion is file-based and polled each cycle from .zerotracefs/commands.
-- Runtime health/state is exported each cycle to .zerotracefs/status.json.
+- External command ingestion is file-based and polled each cycle from .zerotracefw/commands.
+- Runtime health/state is exported each cycle to .zerotracefw/status.json.
 - For high-assurance environments, complement this project with OS-level hardening and dedicated secret-management controls.

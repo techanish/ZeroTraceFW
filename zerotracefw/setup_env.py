@@ -7,7 +7,7 @@ def initialize_project_dirs(base_path: str = ".") -> dict:
     base = Path(base_path).resolve()
     mount_path = base / "mount"
     data_path = base / "data"
-    control_path = base / ".zerotracefs"
+    control_path = base / ".zerotracefw"
     commands_path = control_path / "commands"
     processed_path = control_path / "processed"
 

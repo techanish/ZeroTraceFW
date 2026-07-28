@@ -1,0 +1,31 @@
+{
+  "timestamp": "2026-07-01T12:47:38.436455Z",
+  "control_mode": "gui (strict vault)",
+  "system": {
+    "uptime_seconds": 14083.075987,
+    "last_sync": null
+  },
+  "files": {
+    "count": 0,
+    "names": [],
+    "details": []
+  },
+  "auth": {
+    "failed_attempts": 0,
+    "max_attempts": 5,
+    "remaining_attempts": 5,
+    "duress_hash": "5994471abb01112afcc18159f6cc74b4f511b99806da59b3caf5a9c173cacfc5"
+  },
+  "triggers": {
+    "global_ttl_seconds": null,
+    "global_ttl_remaining_seconds": null,
+    "dead_man_switch_interval_seconds": null,
+    "dead_man_remaining_seconds": null,
+    "last_heartbeat": "2026-07-01T12:47:38.435Z"
+  },
+  "external_commands": {
+    "pending": 0,
+    "last_action": null,
+    "last_error": null
+  }
+}

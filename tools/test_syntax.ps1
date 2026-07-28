@@ -2,7 +2,7 @@
 $ErrorActionPreference = "Stop"
 
 try {
-    $scriptPath = "d:\ZeroTraceFS\tools\ztfs_control_panel.ps1"
+    $scriptPath = "d:\ZeroTraceFW\tools\ztfs_control_panel.ps1"
     
     # Try to parse the script
     $errors = $null

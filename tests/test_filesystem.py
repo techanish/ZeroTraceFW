@@ -1,7 +1,7 @@
 from datetime import timedelta
 
-from zerotracefs.filesystem import VirtualFileSystem
-from zerotracefs.utils import utcnow
+from zerotracefw.filesystem import VirtualFileSystem
+from zerotracefw.utils import utcnow
 
 
 def test_add_file_and_retrieve_it():

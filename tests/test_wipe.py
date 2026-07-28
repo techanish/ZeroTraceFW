@@ -1,6 +1,6 @@
 import os
 
-from zerotracefs.wipe import SecureWiper
+from zerotracefw.wipe import SecureWiper
 
 
 def test_file_is_removed_after_wipe(tmp_path):

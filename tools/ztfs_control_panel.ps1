@@ -27,10 +27,10 @@ if (-not (Test-Path -LiteralPath $cmdScript)) {
   throw "Missing command script: $cmdScript"
 }
 
-$commandsDir = Join-Path $root ".zerotracefs\commands"
-$processedDir = Join-Path $root ".zerotracefs\processed"
+$commandsDir = Join-Path $root ".zerotracefw\commands"
+$processedDir = Join-Path $root ".zerotracefw\processed"
 $mountDir = Join-Path $root "mount"
-$statusFile = Join-Path $root ".zerotracefs\status.json"
+$statusFile = Join-Path $root ".zerotracefw\status.json"
 
 if (-not (Test-Path -LiteralPath $commandsDir)) {
   New-Item -ItemType Directory -Path $commandsDir -Force | Out-Null
@@ -159,14 +159,14 @@ function Convert-StatusSummary {
 $script:SeenProcessed = New-Object 'System.Collections.Generic.HashSet[string]'
 
 $form = New-Object System.Windows.Forms.Form
-$form.Text = "ZeroTraceFS Control Panel"
+$form.Text = "ZeroTraceFW Control Panel"
 $form.Size = New-Object System.Drawing.Size(1000, 800)
 $form.StartPosition = "CenterScreen"
 $form.BackColor = [System.Drawing.Color]::FromArgb(240, 244, 248)
 $form.Font = New-Object System.Drawing.Font("Segoe UI", 9)
 
 $title = New-Object System.Windows.Forms.Label
-$title.Text = "ZeroTraceFS Control Panel"
+$title.Text = "ZeroTraceFW Control Panel"
 $title.Font = New-Object System.Drawing.Font("Segoe UI", 16, [System.Drawing.FontStyle]::Bold)
 $title.ForeColor = [System.Drawing.Color]::FromArgb(30, 58, 138)
 $title.AutoSize = $true
@@ -753,7 +753,7 @@ $timer.Add_Tick({
 })
 $timer.Start()
 
-Write-LogMessage "Control panel ready. ZeroTraceFS enhanced version." -Type "success"
+Write-LogMessage "Control panel ready. ZeroTraceFW enhanced version." -Type "success"
 Write-LogMessage "Project root: $root" -Type "info"
 Write-LogMessage "Run python main.py and keep it in Explorer mode for command execution." -Type "info"
 Write-LogMessage "Tip: Status bar shows runtime health (Green=Active, Yellow=Warning, Red=Inactive)" -Type "info"

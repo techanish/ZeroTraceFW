@@ -1,6 +1,6 @@
 # ZeroTraceFW
 
-ZeroTraceFW (formerly ZeroTraceFS) is a secure, cloud-based document management framework.
+ZeroTraceFW (formerly ZeroTraceFW) is a secure, cloud-based document management framework.
 It combines client-side encryption, memory-only document access, intelligent policy enforcement, automated self-destruction, and continuous activity auditing to provide complete lifecycle protection for confidential data.
 
 ## Highlights
@@ -21,7 +21,7 @@ It combines client-side encryption, memory-only document access, intelligent pol
 
 ## Installation and Startup
 
-1. Clone or extract the project into a folder named ZeroTraceFS.
+1. Clone or extract the project into a folder named ZeroTraceFW.
 2. Build the Rust engine:
 ```powershell
 .\build_engine.bat
@@ -86,7 +86,7 @@ python main.py
 
 ## File Explorer Integration (Windows)
 
-ZeroTraceFS can now be controlled from Windows File Explorer while main.py is running.
+ZeroTraceFW can now be controlled from Windows File Explorer while main.py is running.
 
 ### Install Explorer Right-Click Menu
 
@@ -98,42 +98,42 @@ powershell -ExecutionPolicy Bypass -File .\tools\install_explorer_menu.ps1
 
 ### Use Right-Click Actions
 
-After installation, right-click files or folders and choose ZeroTraceFS actions:
+After installation, right-click files or folders and choose ZeroTraceFW actions:
 
 - File right-click:
-  - ZeroTraceFS: Import into Vault
-  - ZeroTraceFS: Open Securely (Password)
-  - ZeroTraceFS: Destroy in Vault
-  - ZeroTraceFS: Set TTL
-  - ZeroTraceFS: Set Read Limit
-  - ZeroTraceFS: Set Deadline
-  - ZeroTraceFS: Read Preview
-  - ZeroTraceFS: Export from Vault
+  - ZeroTraceFW: Import into Vault
+  - ZeroTraceFW: Open Securely (Password)
+  - ZeroTraceFW: Destroy in Vault
+  - ZeroTraceFW: Set TTL
+  - ZeroTraceFW: Set Read Limit
+  - ZeroTraceFW: Set Deadline
+  - ZeroTraceFW: Read Preview
+  - ZeroTraceFW: Export from Vault
 - Folder right-click or folder background right-click:
-  - ZeroTraceFS: Destroy Entire Vault
-  - ZeroTraceFS: Lock Vault
-  - ZeroTraceFS: Quit Vault
-  - ZeroTraceFS: Queue Status Snapshot
-  - ZeroTraceFS: Queue List Files
-  - ZeroTraceFS: Queue Recent Audit
-  - ZeroTraceFS: Open Control Panel
+  - ZeroTraceFW: Destroy Entire Vault
+  - ZeroTraceFW: Lock Vault
+  - ZeroTraceFW: Quit Vault
+  - ZeroTraceFW: Queue Status Snapshot
+  - ZeroTraceFW: Queue List Files
+  - ZeroTraceFW: Queue Recent Audit
+  - ZeroTraceFW: Open Control Panel
 
 ### How It Works
 
-- Explorer actions enqueue JSON commands in .zerotracefs/commands.
+- Explorer actions enqueue JSON commands in .zerotracefw/commands.
 - Running main.py consumes these commands on each cycle.
-- Results are written to .zerotracefs/processed.
+- Results are written to .zerotracefw/processed.
 - Keep main.py running in a terminal for Explorer actions to execute.
 - Command launcher checks runtime heartbeat and warns when stale, but still queues commands for reliability.
 - Context menu actions run with hidden PowerShell window and use dialog boxes for input when needed.
 
 ### Automatic Read Count from File Open (Best Effort)
 
-- When files are opened directly from mount/, ZeroTraceFS attempts to detect access-time changes and increments read_count.
+- When files are opened directly from mount/, ZeroTraceFW attempts to detect access-time changes and increments read_count.
 - This depends on OS/filesystem last-access timestamp behavior.
 - Read Preview, Open Securely, and CLI read/export always increment read_count.
 - If your system does not update access time for direct file double-clicks, use Open Securely (Password) for strict tracked reads.
-- For password prompt + guaranteed read tracking from File Explorer, use ZeroTraceFS: Open Securely (Password).
+- For password prompt + guaranteed read tracking from File Explorer, use ZeroTraceFW: Open Securely (Password).
 
 ### Click-Based Control Panel UI (Windows)
 
@@ -164,15 +164,15 @@ The panel also includes a command box for CLI-style commands in the same UI.
 
 You can also open it from File Explorer folder context menu:
 
-- ZeroTraceFS: Open Control Panel
+- ZeroTraceFW: Open Control Panel
 
 Runtime status is published to:
 
-- .zerotracefs/status.json
+- .zerotracefw/status.json
 
 Processed command results are saved as JSON files in:
 
-- .zerotracefs/processed
+- .zerotracefw/processed
 
 ### Remove Explorer Menu
 
@@ -271,4 +271,4 @@ python demo/demo_scenario.py
 - File recovery resistance depends on OS, filesystem, and hardware behavior.
 - Dead man's switch timing in a single-threaded terminal loop is cooperative, not hard real-time.
 - Do not treat this as certified secure deletion software for regulated destruction without independent validation.
-- Keep backups of non-disposable data outside ZeroTraceFS.
+- Keep backups of non-disposable data outside ZeroTraceFW.

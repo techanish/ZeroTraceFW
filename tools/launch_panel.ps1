@@ -2,11 +2,11 @@
 $ErrorActionPreference = "Continue"
 
 try {
-    Write-Host "Launching ZeroTraceFS Control Panel..." -ForegroundColor Cyan
-    Write-Host "Path: d:\ZeroTraceFS\tools\ztfs_control_panel.ps1" -ForegroundColor Gray
+    Write-Host "Launching ZeroTraceFW Control Panel..." -ForegroundColor Cyan
+    Write-Host "Path: d:\ZeroTraceFW\tools\ztfs_control_panel.ps1" -ForegroundColor Gray
     Write-Host ""
     
-    & "d:\ZeroTraceFS\tools\ztfs_control_panel.ps1" -ProjectRoot "d:\ZeroTraceFS"
+    & "d:\ZeroTraceFW\tools\ztfs_control_panel.ps1" -ProjectRoot "d:\ZeroTraceFW"
     
 } catch {
     Write-Host ""

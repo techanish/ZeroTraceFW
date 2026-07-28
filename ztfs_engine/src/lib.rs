@@ -2,7 +2,7 @@
 // PyO3 module entry point: exposes all Rust security primitives to Python.
 //
 // Architecture:
-//   Python (gui_app.py / zerotracefs/) <-- PyO3 FFI --> Rust (this crate)
+//   Python (gui_app.py / zerotracefw/) <-- PyO3 FFI --> Rust (this crate)
 //
 // Modules:
 //   crypto          — AES-256-GCM authenticated encryption

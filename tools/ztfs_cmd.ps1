@@ -109,7 +109,7 @@ function Select-DestinationFolder {
 
 function Get-PasswordDialog {
   param(
-    [string]$Title = "ZeroTraceFS",
+    [string]$Title = "ZeroTraceFW",
     [string]$Prompt = "Enter master password"
   )
 
@@ -179,12 +179,12 @@ function Get-RuntimeHealth {
     [int]$WarningAgeSeconds = 300
   )
 
-  $statusPath = Join-Path $Root ".zerotracefs\status.json"
+  $statusPath = Join-Path $Root ".zerotracefw\status.json"
   if (-not (Test-Path -LiteralPath $statusPath)) {
     return [pscustomobject]@{
       Healthy = $false
       AgeSeconds = $null
-      Reason = "Missing .zerotracefs/status.json"
+      Reason = "Missing .zerotracefw/status.json"
     }
   }
 
@@ -317,7 +317,7 @@ function Format-ResultMessage {
 }
 
 $root = Resolve-ProjectRoot -ProjectRoot $ProjectRoot
-$controlDir = Join-Path $root ".zerotracefs"
+$controlDir = Join-Path $root ".zerotracefw"
 $commandsDir = Join-Path $controlDir "commands"
  $processedDir = Join-Path $controlDir "processed"
 Ensure-Directory -Path $commandsDir
@@ -326,7 +326,7 @@ Ensure-Directory -Path $processedDir
 $runtime = Get-RuntimeHealth -Root $root
 $runtimeWarning = $null
 if (-not $runtime.Healthy) {
-  $runtimeWarning = "ZeroTraceFS runtime may not be actively processing commands.`r`n$($runtime.Reason)"
+  $runtimeWarning = "ZeroTraceFW runtime may not be actively processing commands.`r`n$($runtime.Reason)"
 }
 
 $normalizedAction = $Action.Trim().ToLowerInvariant()
@@ -357,7 +357,7 @@ switch ($normalizedAction) {
     if ([string]::IsNullOrWhiteSpace($TargetPath)) {
       throw "open-secure requires a file path argument."
     }
-    $password = Get-PasswordDialog -Title "ZeroTraceFS" -Prompt "Enter vault master password to open this file"
+    $password = Get-PasswordDialog -Title "ZeroTraceFW" -Prompt "Enter vault master password to open this file"
     if ([string]::IsNullOrWhiteSpace($password)) {
       throw "Cancelled by user."
     }
@@ -397,7 +397,7 @@ switch ($normalizedAction) {
     if ($PSBoundParameters.ContainsKey("Minutes") -and $null -ne $Minutes) {
       $minutesValue = [double]$Minutes
     } else {
-      $minutes = Get-DialogInput -Title "ZeroTraceFS" -Prompt "Enter TTL in minutes" -DefaultValue "10"
+      $minutes = Get-DialogInput -Title "ZeroTraceFW" -Prompt "Enter TTL in minutes" -DefaultValue "10"
       if ([string]::IsNullOrWhiteSpace($minutes)) {
         throw "Cancelled by user."
       }
@@ -419,7 +419,7 @@ switch ($normalizedAction) {
     if ($PSBoundParameters.ContainsKey("MaxReads") -and $null -ne $MaxReads) {
       $readsValue = [int]$MaxReads
     } else {
-      $reads = Get-DialogInput -Title "ZeroTraceFS" -Prompt "Enter max reads" -DefaultValue "3"
+      $reads = Get-DialogInput -Title "ZeroTraceFW" -Prompt "Enter max reads" -DefaultValue "3"
       if ([string]::IsNullOrWhiteSpace($reads)) {
         throw "Cancelled by user."
       }
@@ -439,7 +439,7 @@ switch ($normalizedAction) {
     }
     $deadlineValue = $Deadline
     if ([string]::IsNullOrWhiteSpace($deadlineValue)) {
-      $deadlineValue = Get-DialogInput -Title "ZeroTraceFS" -Prompt "Enter deadline (YYYY-MM-DD HH:MM:SS)" -DefaultValue "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
+      $deadlineValue = Get-DialogInput -Title "ZeroTraceFW" -Prompt "Enter deadline (YYYY-MM-DD HH:MM:SS)" -DefaultValue "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
     }
     if ([string]::IsNullOrWhiteSpace($deadlineValue)) {
       throw "Deadline must not be empty."
@@ -449,7 +449,7 @@ switch ($normalizedAction) {
   }
   "destroy-all" {
     if (-not $Force) {
-      if (-not (Confirm-Dialog -Title "ZeroTraceFS" -Message "Destroy the entire vault? This cannot be undone.")) {
+      if (-not (Confirm-Dialog -Title "ZeroTraceFW" -Message "Destroy the entire vault? This cannot be undone.")) {
         Write-Host "Cancelled." -ForegroundColor Yellow
         exit 0
       }
@@ -488,7 +488,7 @@ if (-not $SuppressResultDialog -and $effectiveWait -gt 0) {
     if (-not [string]::IsNullOrWhiteSpace($runtimeWarning)) {
       $message = "$message`r`n`r`n$runtimeWarning`r`nStart python main.py and keep it running."
     }
-    Show-ResultDialog -Title "ZeroTraceFS" -Message $message -Icon ([System.Windows.Forms.MessageBoxIcon]::Information)
+    Show-ResultDialog -Title "ZeroTraceFW" -Message $message -Icon ([System.Windows.Forms.MessageBoxIcon]::Information)
   } else {
     $dialogMessage = Format-ResultMessage -ResultObj $resultObj
     if (-not [string]::IsNullOrWhiteSpace($runtimeWarning)) {
@@ -499,10 +499,10 @@ if (-not $SuppressResultDialog -and $effectiveWait -gt 0) {
     } else {
       [System.Windows.Forms.MessageBoxIcon]::Error
     }
-    Show-ResultDialog -Title "ZeroTraceFS: $($resultObj.status)" -Message $dialogMessage -Icon $icon
+    Show-ResultDialog -Title "ZeroTraceFW: $($resultObj.status)" -Message $dialogMessage -Icon $icon
   }
 }
 
-Write-Host "Queued ZeroTraceFS command:" -ForegroundColor Green
+Write-Host "Queued ZeroTraceFW command:" -ForegroundColor Green
 Write-Host "  $created"
-Write-Host "Ensure python main.py is running in the ZeroTraceFS terminal."
+Write-Host "Ensure python main.py is running in the ZeroTraceFW terminal."

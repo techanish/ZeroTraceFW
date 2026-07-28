@@ -7,7 +7,7 @@ def display_banner() -> None:
     banner = [
         "========================================================",
         "                ZERO TRACE FILE SYSTEM                  ",
-        "                   ZeroTraceFS Vault                    ",
+        "                   ZeroTraceFW Vault                    ",
         "       Self-Destructing Encrypted File System           ",
         "",
         "            AES-256-CBC | Trigger-Driven Wipe           ",

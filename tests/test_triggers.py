@@ -1,8 +1,8 @@
 from datetime import timedelta
 
-from zerotracefs.filesystem import VirtualFileSystem
-from zerotracefs.triggers import TriggerEngine
-from zerotracefs.utils import utcnow
+from zerotracefw.filesystem import VirtualFileSystem
+from zerotracefw.triggers import TriggerEngine
+from zerotracefw.utils import utcnow
 
 
 def make_meta():

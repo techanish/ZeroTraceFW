@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import time
 
-from zerotracefs.audit import AuditLogger
-from zerotracefs.auth import AuthManager
-from zerotracefs.filesystem import VirtualFileSystem
-from zerotracefs.setup_env import run_setup
-from zerotracefs.sync import SyncEngine
-from zerotracefs.triggers import TriggerEngine
-from zerotracefs.wipe import SecureWiper
+from zerotracefw.audit import AuditLogger
+from zerotracefw.auth import AuthManager
+from zerotracefw.filesystem import VirtualFileSystem
+from zerotracefw.setup_env import run_setup
+from zerotracefw.sync import SyncEngine
+from zerotracefw.triggers import TriggerEngine
+from zerotracefw.wipe import SecureWiper
 
 
 def run_demo_scenario() -> None:

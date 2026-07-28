@@ -1,7 +1,7 @@
 import os
 
-from zerotracefs.filesystem import VirtualFileSystem
-from zerotracefs.sync import SyncEngine
+from zerotracefw.filesystem import VirtualFileSystem
+from zerotracefw.sync import SyncEngine
 
 
 def test_sync_lifecycle(tmp_path):

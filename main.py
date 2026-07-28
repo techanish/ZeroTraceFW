@@ -1,5 +1,5 @@
-from zerotracefs.runtime import run_zerotracefs
+from zerotracefw.runtime import run_zerotracefw
 
 
 if __name__ == "__main__":
-    run_zerotracefs()
+    run_zerotracefw()

@@ -1,13 +1,13 @@
 import os
 
-from zerotracefs.encryption import EncryptionEngine
+from zerotracefw.encryption import EncryptionEngine
 
 
 def test_encrypt_then_decrypt_returns_original_content():
     engine = EncryptionEngine()
     key = engine.generate_key()
     iv = engine.generate_iv()
-    plaintext = b"ZeroTraceFS test plaintext"
+    plaintext = b"ZeroTraceFW test plaintext"
     ciphertext = engine.encrypt(plaintext, key, iv)
     recovered = engine.decrypt(ciphertext, key, iv)
     assert plaintext == recovered

@@ -34,7 +34,7 @@ from .utils import format_utc, parse_time, utcnow
 from .wipe import SecureWiper
 
 
-def run_zerotracefs() -> bool:
+def run_zerotracefw() -> bool:
     paths = run_setup(".")
     display_banner()
 

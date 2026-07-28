@@ -1,4 +1,4 @@
-from zerotracefs.auth import AuthManager
+from zerotracefw.auth import AuthManager
 
 
 def test_correct_password_returns_granted():
