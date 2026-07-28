@@ -9,9 +9,10 @@ logger = logging.getLogger(__name__)
 class GoogleDriveBackend(CloudBackend):
     """Google Drive cloud backend for ZeroTraceFW."""
     
-    def __init__(self, credentials_path: str = "credentials.json", folder_name: str = "ZeroTraceFW_Vault"):
+    def __init__(self, credentials_path: str = "credentials.json", folder_name: str = "ZeroTraceFW_Vault", interactive: bool = False):
         self.credentials_path = credentials_path
         self.folder_name = folder_name
+        self.interactive = interactive
         self.service = None
         self.folder_id = None
         self._authenticate()
@@ -31,7 +32,7 @@ class GoogleDriveBackend(CloudBackend):
             self.MediaIoBaseDownload = MediaIoBaseDownload
             self.io = io
 
-            SCOPES = ['https://www.googleapis.com/auth/drive.file']
+            SCOPES = ['https://www.googleapis.com/auth/drive.file', 'https://www.googleapis.com/auth/userinfo.profile']
             creds = None
             if os.path.exists('token.json'):
                 creds = Credentials.from_authorized_user_file('token.json', SCOPES)
@@ -39,6 +40,9 @@ class GoogleDriveBackend(CloudBackend):
                 if creds and creds.expired and creds.refresh_token:
                     creds.refresh(Request())
                 else:
+                    if not self.interactive:
+                        logger.warning("No valid Google Drive token found. Cloud sync disabled (not in interactive mode).")
+                        return
                     # Embedded OAuth Client Config using local secrets.py
                     from zerotracefw.secrets import GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
                     client_config = {
@@ -136,3 +140,26 @@ class GoogleDriveBackend(CloudBackend):
         
         file = self.service.files().get(fileId=file_id, fields='modifiedTime').execute()
         return file.get('modifiedTime', "")
+
+    def get_user_info(self) -> dict | None:
+        if not getattr(self, 'service', None): return None
+        try:
+            import requests
+            token = self.service._http.credentials.token
+            resp = requests.get(
+                "https://www.googleapis.com/oauth2/v1/userinfo",
+                headers={"Authorization": f"Bearer {token}"}
+            )
+            if resp.status_code == 200:
+                user_info = resp.json()
+                return {
+                    "name": user_info.get("name"),
+                    "picture": user_info.get("picture"),
+                    "email": user_info.get("email")
+                }
+            else:
+                logger.error(f"Failed to fetch user profile info: {resp.text}")
+                return None
+        except Exception as e:
+            logger.error(f"Exception fetching user profile info: {e}")
+            return None

@@ -55,7 +55,7 @@ class UniversalViewerDialog(QDialog):
         self.setWindowTitle(f"ZeroTraceFW Secure Viewer - {filename}")
         self.resize(1024, 768)
         self.setWindowFlags(self.windowFlags() | Qt.WindowType.WindowMaximizeButtonHint)
-        self.setStyleSheet("background-color: #0f172a; color: #e2e8f0;")
+        self.setStyleSheet("font-family: 'Segoe UI';")
         
         self.open_time = datetime.datetime.now()
         
@@ -448,8 +448,9 @@ class StyledButton(QPushButton):
             QPushButton {{
                 background-color: {bg_color};
                 color: {fg_color};
-                border: none;
-                border-radius: 4px;
+                border: 1px solid {self.adjust_color(bg_color, -30)};
+                border-radius: 6px;
+                padding: 4px;
             }}
             QPushButton:hover {{
                 background-color: {self.adjust_color(bg_color, 20)};
@@ -475,16 +476,7 @@ class ZeroTraceFWControlPanel(QMainWindow):
         self.setFixedSize(1000, 800)
         self.seen_processed = set()
         
-        # Dark theme
-        self.setStyleSheet("""
-            QMainWindow { background-color: #0f172a; }
-            QLabel { color: #e2e8f0; font-family: 'Segoe UI'; }
-            QTextEdit { background-color: #1e293b; color: #f8fafc; border: 1px solid #334155; font-family: 'Consolas'; border-radius: 4px;}
-            QComboBox { background-color: #1e293b; color: #f8fafc; border: 1px solid #334155; padding: 2px; border-radius: 4px;}
-            QComboBox::drop-down { border: none; }
-            QLineEdit { background-color: #1e293b; color: #f8fafc; border: 1px solid #334155; padding: 4px; font-family: 'Consolas'; border-radius: 4px;}
-            QMessageBox { background-color: #0f172a; color: #e2e8f0; }
-        """)
+        self.setStyleSheet("font-family: 'Segoe UI';")
 
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
@@ -531,11 +523,9 @@ class ZeroTraceFWControlPanel(QMainWindow):
         # Account Section
         self.account_frame = QFrame(central_widget)
         self.account_frame.setGeometry(795, 140, 165, 80)
-        self.account_frame.setStyleSheet("background-color: #1e293b; border: 1px solid #334155; border-radius: 6px;")
         
         acc_label = QLabel("Account", self.account_frame)
         acc_label.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
-        acc_label.setStyleSheet("color: #cbd5e1; border: none; background: transparent;")
         acc_label.move(10, 8)
         
         self.btn_google_login = StyledButton("Login with Google", "#2563eb", "#ffffff")
@@ -543,6 +533,25 @@ class ZeroTraceFWControlPanel(QMainWindow):
         self.btn_google_login.setGeometry(10, 35, 145, 32)
         self.btn_google_login.setIcon(QIcon.fromTheme("applications-internet"))
         self.btn_google_login.clicked.connect(self.on_google_login)
+
+        # Profile Picture Label (hidden by default)
+        self.profile_pic_label = QLabel(self.account_frame)
+        self.profile_pic_label.setGeometry(10, 30, 40, 40)
+        self.profile_pic_label.setScaledContents(True)
+        self.profile_pic_label.hide()
+        
+        # Profile Name Label (hidden by default)
+        self.profile_name_label = QLabel(self.account_frame)
+        self.profile_name_label.setGeometry(60, 30, 95, 20)
+        self.profile_name_label.setFont(QFont("Segoe UI", 8))
+        self.profile_name_label.hide()
+        
+        # Logout Button (hidden by default)
+        self.btn_google_logout = StyledButton("Logout", "#ef4444", "#ffffff")
+        self.btn_google_logout.setParent(self.account_frame)
+        self.btn_google_logout.setGeometry(60, 52, 95, 20)
+        self.btn_google_logout.clicked.connect(self.on_google_logout)
+        self.btn_google_logout.hide()
 
         # Buttons Row 1
         self.btn_import = StyledButton("Import File", "#3b82f6")
@@ -639,14 +648,7 @@ class ZeroTraceFWControlPanel(QMainWindow):
         self.log_box = QTextEdit(central_widget)
         self.log_box.setGeometry(25, 545, 940, 220)
         self.log_box.setReadOnly(True)
-        self.log_box.setStyleSheet("""
-            QTextEdit { 
-                background-color: #020617; 
-                color: #22c55e; 
-                border: 1px solid #334155; 
-                font-family: 'Consolas'; 
-            }
-        """)
+        self.log_box.setStyleSheet("font-family: 'Consolas';")
 
         self.setup_signals()
         
@@ -670,6 +672,7 @@ class ZeroTraceFWControlPanel(QMainWindow):
                 except: pass
 
         self.on_timer()
+        self.update_account_ui()
         
         # Start the engine
         QTimer.singleShot(500, self.start_engine)
@@ -1079,13 +1082,69 @@ class ZeroTraceFWControlPanel(QMainWindow):
             except:
                 pass
 
+    def update_account_ui(self, backend=None):
+        if backend is None:
+            from zerotracefw.cloud.gdrive import GoogleDriveBackend
+            backend = GoogleDriveBackend()
+        
+        if backend.service:
+            user_info = backend.get_user_info()
+            if user_info:
+                self.btn_google_login.hide()
+                
+                import requests
+                from PyQt6.QtGui import QPixmap, QPainter, QPainterPath, QBrush
+                from PyQt6.QtCore import Qt
+                try:
+                    pic_data = requests.get(user_info.get("picture")).content
+                    pixmap = QPixmap()
+                    pixmap.loadFromData(pic_data)
+                    
+                    size = min(pixmap.width(), pixmap.height())
+                    rounded = QPixmap(size, size)
+                    rounded.fill(Qt.GlobalColor.transparent)
+                    
+                    painter = QPainter(rounded)
+                    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+                    path = QPainterPath()
+                    path.addEllipse(0, 0, size, size)
+                    painter.setClipPath(path)
+                    
+                    painter.drawPixmap(0, 0, pixmap.scaled(size, size, Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation))
+                    painter.end()
+                    
+                    self.profile_pic_label.setPixmap(rounded)
+                except Exception as e:
+                    pass
+                
+                self.profile_name_label.setText(user_info.get("name", "User"))
+                self.profile_pic_label.show()
+                self.profile_name_label.show()
+                self.btn_google_logout.show()
+        else:
+            self.profile_pic_label.hide()
+            self.profile_name_label.hide()
+            self.btn_google_logout.hide()
+            self.btn_google_login.show()
+
+    def on_google_logout(self):
+        token_path = PROJECT_ROOT / "token.json"
+        if token_path.exists():
+            try:
+                token_path.unlink()
+            except Exception as e:
+                pass
+        self.update_account_ui()
+        self.write_log("Logged out of Google Drive. Cloud sync disabled.", "info")
+
     def on_google_login(self):
         try:
             from zerotracefw.cloud.gdrive import GoogleDriveBackend
-            backend = GoogleDriveBackend()
+            backend = GoogleDriveBackend(interactive=True)
             if backend.service:
                 QMessageBox.information(self, "Success", "Successfully authenticated with Google Drive!\nCloud sync is now enabled.")
                 self.write_log("Google Drive authentication successful. Cloud sync enabled.", "success")
+                self.update_account_ui(backend)
             else:
                 QMessageBox.warning(self, "Warning", "Authentication process started but did not complete successfully.")
         except Exception as e:
@@ -1117,11 +1176,7 @@ if __name__ == "__main__":
         
     app = QApplication(sys.argv)
     
-    # Custom modern dark palette
-    palette = QPalette()
-    palette.setColor(QPalette.ColorRole.Window, QColor(15, 23, 42))
-    palette.setColor(QPalette.ColorRole.WindowText, QColor(226, 232, 240))
-    app.setPalette(palette)
+    app.setStyle("windowsvista")
     
     window = ZeroTraceFWControlPanel()
     window.show()
