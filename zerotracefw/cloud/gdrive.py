@@ -100,19 +100,26 @@ class GoogleDriveBackend(CloudBackend):
 
     def upload(self, remote_path: str, data: bytes) -> bool:
         if not self.service or not self.folder_id: return False
-        try:
-            file_metadata = {'name': remote_path, 'parents': [self.folder_id]}
-            media = self.MediaIoBaseUpload(self.io.BytesIO(data), mimetype='application/octet-stream', resumable=True)
-            
-            existing_id = self._get_file_id(remote_path)
-            if existing_id:
-                self.service.files().update(fileId=existing_id, media_body=media).execute()
-            else:
-                self.service.files().create(body=file_metadata, media_body=media, fields='id').execute()
-            return True
-        except Exception as e:
-            logger.error(f"Google Drive upload failed: {e}")
-            return False
+        import time
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                file_metadata = {'name': remote_path, 'parents': [self.folder_id]}
+                media = self.MediaIoBaseUpload(self.io.BytesIO(data), mimetype='application/octet-stream', resumable=True)
+                
+                existing_id = self._get_file_id(remote_path)
+                if existing_id:
+                    self.service.files().update(fileId=existing_id, media_body=media).execute()
+                else:
+                    self.service.files().create(body=file_metadata, media_body=media, fields='id').execute()
+                return True
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    logger.warning(f"Google Drive upload failed (attempt {attempt+1}/{max_retries}), retrying... {e}")
+                    time.sleep(2)
+                    continue
+                logger.error(f"Google Drive upload failed after {max_retries} attempts: {e}")
+                return False
 
     def download(self, remote_path: str) -> bytes:
         if not self.service: raise FileNotFoundError("Service not initialized")
