@@ -38,8 +38,15 @@ class GoogleDriveBackend(CloudBackend):
                 creds = Credentials.from_authorized_user_file('token.json', SCOPES)
             if not creds or not creds.valid:
                 if creds and creds.expired and creds.refresh_token:
-                    creds.refresh(Request())
-                else:
+                    try:
+                        creds.refresh(Request())
+                    except Exception as e:
+                        logger.warning(f"Failed to refresh token ({e}). Forcing re-login.")
+                        if os.path.exists('token.json'):
+                            os.remove('token.json')
+                        creds = None
+                
+                if not creds:
                     if not self.interactive:
                         logger.warning("No valid Google Drive token found. Cloud sync disabled (not in interactive mode).")
                         return
