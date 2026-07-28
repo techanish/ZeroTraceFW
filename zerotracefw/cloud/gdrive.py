@@ -61,7 +61,7 @@ class GoogleDriveBackend(CloudBackend):
                 with open('token.json', 'w') as token:
                     token.write(creds.to_json())
 
-            self.service = build('drive', 'v3', credentials=creds)
+            self.service = build('drive', 'v3', credentials=creds, cache_discovery=False)
             self._ensure_folder()
         except ImportError:
             logger.warning("google-api-python-client is not installed. Run 'pip install google-api-python-client google-auth-oauthlib'")
@@ -70,18 +70,26 @@ class GoogleDriveBackend(CloudBackend):
 
     def _ensure_folder(self):
         if not self.service: return
-        query = f"name='{self.folder_name}' and mimeType='application/vnd.google-apps.folder' and trashed=false"
-        results = self.service.files().list(q=query, spaces='drive', fields='files(id, name)').execute()
-        items = results.get('files', [])
-        if not items:
-            folder_metadata = {
-                'name': self.folder_name,
-                'mimeType': 'application/vnd.google-apps.folder'
-            }
-            folder = self.service.files().create(body=folder_metadata, fields='id').execute()
-            self.folder_id = folder.get('id')
-        else:
-            self.folder_id = items[0].get('id')
+        from googleapiclient.errors import HttpError
+        try:
+            query = f"name='{self.folder_name}' and mimeType='application/vnd.google-apps.folder' and trashed=false"
+            results = self.service.files().list(q=query, spaces='drive', fields='files(id, name)').execute()
+            items = results.get('files', [])
+            if not items:
+                folder_metadata = {
+                    'name': self.folder_name,
+                    'mimeType': 'application/vnd.google-apps.folder'
+                }
+                folder = self.service.files().create(body=folder_metadata, fields='id').execute()
+                self.folder_id = folder.get('id')
+            else:
+                self.folder_id = items[0].get('id')
+        except HttpError as e:
+            if e.resp.status == 403 and "accessNotConfigured" in str(e):
+                logger.error("Google Drive API is not enabled for your Google Cloud Project. Please enable it in the GCP Console.")
+            else:
+                logger.error(f"Google Drive API error: {e}")
+            self.service = None
 
     def _get_file_id(self, filename: str) -> str:
         if not self.service or not self.folder_id: return ""
