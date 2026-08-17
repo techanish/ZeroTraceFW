@@ -10,25 +10,94 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QFont, QPixmap, QColor, QPainter, QIcon, QPen, QPolygonF
 from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal, QSize, QPointF
 
+import shutil
+import subprocess
+import os
+import sys
+
+def get_resource_path():
+    if hasattr(sys, '_MEIPASS'):
+        return Path(sys._MEIPASS)
+    return Path(os.path.abspath(__file__)).parent
+
 class InstallThread(QThread):
     progress_update = pyqtSignal(int, int) # item_index, item_progress
     item_started = pyqtSignal(int)
     item_completed = pyqtSignal(int)
     finished_install = pyqtSignal()
     
-    def __init__(self, num_items):
+    def __init__(self, target_dir):
         super().__init__()
-        self.num_items = num_items
+        self.target_dir = Path(target_dir)
+        self.source_dir = get_resource_path()
+        
+        # When compiling the app to an exe, everything is packed into ZeroTraceFW.exe
+        self.tasks = [
+            # 0: Core Runtime
+            (["ZeroTraceFW.exe"], 0),
+            # 1: Cloud Sync Module (embedded)
+            ([], 1),
+            # 2: Encryption Engine (embedded)
+            ([], 2),
+            # 3: PyQt6 GUI Components (embedded)
+            (["logo.png"], 3),
+            # 4: VFS Drivers
+            ([], 4),
+            # 5: Registry Keys
+            ([], 5),
+            # 6: Shortcuts
+            ([], 6)
+        ]
         
     def run(self):
-        for i in range(self.num_items):
-            self.item_started.emit(i)
-            # Simulate installation time for each component
-            for p in range(0, 101, 10):
-                self.progress_update.emit(i, p)
-                time.sleep(0.05)
-            self.item_completed.emit(i)
-        self.finished_install.emit()
+        try:
+            self.target_dir.mkdir(parents=True, exist_ok=True)
+            
+            for paths, comp_idx in self.tasks:
+                self.item_started.emit(comp_idx)
+                
+                if comp_idx == 6:
+                    self.create_shortcut()
+                else:
+                    for p in paths:
+                        src = self.source_dir / p
+                        dst = self.target_dir / p
+                        if src.exists():
+                            dst.parent.mkdir(parents=True, exist_ok=True)
+                            if src.is_dir():
+                                if dst.exists(): shutil.rmtree(dst)
+                                shutil.copytree(src, dst)
+                            else:
+                                shutil.copy2(src, dst)
+                
+                # Simulate a little processing time so the UI isn't instantaneous
+                for p in range(0, 101, 20):
+                    self.progress_update.emit(comp_idx, p)
+                    time.sleep(0.1)
+                    
+                self.item_completed.emit(comp_idx)
+                
+            self.finished_install.emit()
+        except Exception as e:
+            print(f"Installation error: {e}")
+            self.finished_install.emit()
+
+    def create_shortcut(self):
+        # Create a desktop shortcut using powershell
+        desktop = Path.home() / "Desktop"
+        shortcut_path = desktop / "ZeroTraceFS.lnk"
+        target_path = self.target_dir / "ZeroTraceFW.exe"
+        icon_path = self.target_dir / "logo.png"
+        
+        ps_script = f'''
+        $WshShell = New-Object -comObject WScript.Shell
+        $Shortcut = $WshShell.CreateShortcut("{shortcut_path}")
+        $Shortcut.TargetPath = "{target_path}"
+        $Shortcut.IconLocation = "{icon_path}"
+        $Shortcut.WorkingDirectory = "{self.target_dir}"
+        $Shortcut.Save()
+        '''
+        subprocess.run(["powershell", "-NoProfile", "-Command", ps_script], capture_output=True)
 
 class InstallerWizard(QWidget):
     def __init__(self):
@@ -299,7 +368,7 @@ class InstallerWizard(QWidget):
 
     def start_installation(self):
         self.update_buttons()
-        self.thread = InstallThread(len(self.components))
+        self.thread = InstallThread(self.folder_input.text())
         self.thread.item_started.connect(self.on_item_started)
         self.thread.progress_update.connect(self.on_item_progress)
         self.thread.item_completed.connect(self.on_item_completed)
