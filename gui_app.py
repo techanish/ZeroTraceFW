@@ -53,6 +53,9 @@ class UniversalViewerDialog(QDialog):
         self.zoom_level = 100
         
         self.setWindowTitle(f"ZeroTraceFW Secure Viewer - {filename}")
+        logo_path = PROJECT_ROOT / "logo.png"
+        if logo_path.exists():
+            self.setWindowIcon(QIcon(str(logo_path)))
         self.resize(1024, 768)
         self.setWindowFlags(self.windowFlags() | Qt.WindowType.WindowMaximizeButtonHint)
         self.setStyleSheet("font-family: 'Segoe UI';")
@@ -473,6 +476,9 @@ class ZeroTraceFWControlPanel(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("ZeroTraceFW Control Panel")
+        logo_path = PROJECT_ROOT / "logo.png"
+        if logo_path.exists():
+            self.setWindowIcon(QIcon(str(logo_path)))
         self.setFixedSize(1000, 800)
         self.seen_processed = set()
         
@@ -481,11 +487,20 @@ class ZeroTraceFWControlPanel(QMainWindow):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
 
-        # Title
+        # Title Logo & Label
+        title_x = 25
+        if logo_path.exists():
+            from PyQt6.QtGui import QPixmap
+            logo_label = QLabel(central_widget)
+            pix = QPixmap(str(logo_path)).scaled(36, 36, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            logo_label.setPixmap(pix)
+            logo_label.setGeometry(25, 16, 36, 36)
+            title_x = 70
+
         title_label = QLabel("ZeroTraceFW Control Panel", central_widget)
         title_label.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
         title_label.setStyleSheet("color: #38bdf8;")
-        title_label.move(25, 20)
+        title_label.move(title_x, 20)
         title_label.adjustSize()
 
         # Subtitle
@@ -1175,7 +1190,9 @@ if __name__ == "__main__":
         sys.exit(0)
         
     app = QApplication(sys.argv)
-    
+    logo_path = PROJECT_ROOT / "logo.png"
+    if logo_path.exists():
+        app.setWindowIcon(QIcon(str(logo_path)))
     app.setStyle("windowsvista")
     
     window = ZeroTraceFWControlPanel()

@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="../logo.png" alt="ZeroTraceFW Logo" width="180">
+</p>
+
 # ZeroTraceFW: A Multi-Layered Zero-Trust Storage Architecture Featuring Hardware-Attested Ephemeral Lifecycles, Cryptographic Self-Destruction, and Cloud-Synchronized Air-Gapping
 
 **Comprehensive Enterprise Technical Whitepaper & Complete Systems Manual**  

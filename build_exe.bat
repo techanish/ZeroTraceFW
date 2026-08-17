@@ -21,6 +21,8 @@ python -m PyInstaller --clean ^
   --hidden-import="uvicorn.lifespan.off" ^
   --hidden-import="fastapi" ^
   --hidden-import="sqlite3" ^
+  --add-data "logo.png;." ^
+  --icon="logo.png" ^
   --copy-metadata="fastapi" ^
   --copy-metadata="uvicorn" ^
   gui_app.py

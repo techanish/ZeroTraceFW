@@ -34,10 +34,20 @@ class NotificationEngine:
         }.get(level, 5)
 
         try:
+            from pathlib import Path
+            import sys
+            if getattr(sys, 'frozen', False):
+                base_dir = Path(sys.executable).parent.resolve()
+            else:
+                base_dir = Path(__file__).parent.parent.resolve()
+            logo = base_dir / "logo.png"
+            icon_arg = str(logo) if logo.exists() else None
+
             notification.notify(
                 title=f"{self.app_name} - {title}",
                 message=message,
                 app_name=self.app_name,
+                app_icon=icon_arg,
                 timeout=timeout,
             )
             return True

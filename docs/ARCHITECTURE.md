@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="../logo.png" alt="ZeroTraceFW Logo" width="160">
+</p>
+
 # ZeroTraceFW Architecture
 
 ## 1) Three-Layer Architecture
