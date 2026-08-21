@@ -1,6 +1,6 @@
 # ZeroTraceFW
 
-ZeroTraceFW (formerly ZeroTraceFW) is a secure, cloud-based document management framework.
+ZeroTraceFW (formerly ZeroTraceFS) is a secure, cloud-based document management framework.
 It combines client-side encryption, memory-only document access, intelligent policy enforcement, automated self-destruction, and continuous activity auditing to provide complete lifecycle protection for confidential data.
 
 ## Highlights
