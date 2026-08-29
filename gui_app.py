@@ -1349,20 +1349,36 @@ class ZeroTraceFWControlPanel(QMainWindow):
                 self.write_log("Connected to Google Drive. Created/verified 'zfs' folder.", "success")
                 self.update_account_ui(backend)
                 
-                storage_dir = PROJECT_ROOT / ".zerotracefw" / "storage"
-                if not storage_dir.exists():
-                    self.write_log("Vault storage directory (.zerotracefw/storage) does not exist.", "warning")
+                search_dirs = [
+                    DATA_ROOT / ".zerotracefw" / "storage",
+                    MOUNT_DIR,
+                    DATA_ROOT / "data",
+                    Path(f"{VHD_DRIVE_LETTER}:\\")
+                ]
+
+                files_to_upload = []
+                seen_names = set()
+
+                for d in search_dirs:
+                    if d.exists():
+                        try:
+                            for item in d.iterdir():
+                                if item.is_file() and item.name not in seen_names:
+                                    if item.name.endswith(".zfs") or item.name.endswith(".pkl") or item.name.endswith(".bin"):
+                                        if item.name not in ["zfs.vhd", "desktop.ini", "autorun.inf"]:
+                                            files_to_upload.append(item)
+                                            seen_names.add(item.name)
+                        except Exception:
+                            pass
+
+                if not files_to_upload:
+                    self.write_log("No encrypted .zfs files found in vault or VHD drive to upload.", "warning")
                     return
                 
-                files = [f for f in storage_dir.iterdir() if f.is_file()]
-                if not files:
-                    self.write_log("No encrypted files found in local vault storage to upload.", "warning")
-                    return
-                
-                self.write_log(f"Found {len(files)} encrypted file(s) in local vault. Starting upload to 'zfs' folder on Google Drive...", "info")
+                self.write_log(f"Found {len(files_to_upload)} encrypted file(s). Starting upload to 'zfs' folder on Google Drive...", "info")
                 
                 count = 0
-                for f in files:
+                for f in files_to_upload:
                     fname = f.name
                     data = f.read_bytes()
                     self.write_log(f"Uploading '{fname}' ({len(data)} bytes) to 'zfs'...", "info")
@@ -1372,7 +1388,7 @@ class ZeroTraceFWControlPanel(QMainWindow):
                     else:
                         self.write_log(f"Failed to upload '{fname}' to Drive.", "error")
                 
-                self.write_log(f"Drive Cloud Backup Complete! Stored {count}/{len(files)} encrypted file(s) in Google Drive 'zfs' folder.", "success")
+                self.write_log(f"Drive Cloud Backup Complete! Stored {count}/{len(files_to_upload)} encrypted file(s) in Google Drive 'zfs' folder.", "success")
             except Exception as e:
                 self.write_log(f"Error during Google Drive upload: {e}", "error")
 
