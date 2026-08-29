@@ -5,6 +5,14 @@ from pathlib import Path
 
 def initialize_project_dirs(base_path: str = ".") -> dict:
     base = Path(base_path).resolve()
+    # Test if base directory is writable (e.g. not Program Files)
+    try:
+        test_file = base / ".perm_test"
+        test_file.touch()
+        test_file.unlink()
+    except (PermissionError, OSError):
+        base = Path.home() / ".zerotracefw"
+
     mount_path = base / "mount"
     data_path = base / "data"
     control_path = base / ".zerotracefw"

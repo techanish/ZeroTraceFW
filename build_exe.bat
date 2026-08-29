@@ -7,6 +7,7 @@ python -m PyInstaller --clean ^
   --name "ZeroTraceFW" ^
   --onefile ^
   --windowed ^
+  --uac-admin ^
   --hidden-import="uvicorn" ^
   --hidden-import="uvicorn.logging" ^
   --hidden-import="uvicorn.loops" ^

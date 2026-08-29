@@ -19,41 +19,10 @@ class NotificationEngine:
         self.app_name = app_name
 
     def notify(self, title: str, message: str, level: NotificationLevel = "info") -> bool:
-        """Sends a desktop notification to the document owner."""
+        """Logs security events without triggering OS desktop notifications."""
         logger.info(f"NOTIFICATION [{level.upper()}]: {title} - {message}")
-        
-        if not _HAS_PLYER:
-            logger.warning("Plyer not installed. Cannot send desktop notification.")
-            return False
-
-        # Timeout in seconds based on severity
-        timeout = {
-            "info": 5,
-            "warning": 10,
-            "critical": 20
-        }.get(level, 5)
-
-        try:
-            from pathlib import Path
-            import sys
-            if getattr(sys, 'frozen', False):
-                base_dir = Path(sys.executable).parent.resolve()
-            else:
-                base_dir = Path(__file__).parent.parent.resolve()
-            logo = base_dir / "logo.png"
-            icon_arg = str(logo) if logo.exists() else None
-
-            notification.notify(
-                title=f"{self.app_name} - {title}",
-                message=message,
-                app_name=self.app_name,
-                app_icon=icon_arg,
-                timeout=timeout,
-            )
-            return True
-        except Exception as e:
-            logger.error(f"Failed to send desktop notification: {e}")
-            return False
+        # Desktop notification toasts disabled per configuration
+        return True
 
     def notify_security_event(self, event_type: str, details: str) -> bool:
         """Helper for high-priority security alerts (e.g. debugger detected, duress)."""

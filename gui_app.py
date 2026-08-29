@@ -22,15 +22,33 @@ if getattr(sys, 'frozen', False):
     PROJECT_ROOT = Path(sys.executable).parent.resolve()
 else:
     PROJECT_ROOT = Path(__file__).parent.resolve()
-os.chdir(str(PROJECT_ROOT))
-COMMANDS_DIR = PROJECT_ROOT / ".zerotracefw" / "commands"
-PROCESSED_DIR = PROJECT_ROOT / ".zerotracefw" / "processed"
-MOUNT_DIR = PROJECT_ROOT / "mount"
-STATUS_FILE = PROJECT_ROOT / ".zerotracefw" / "status.json"
-CONTAINER_FILE = PROJECT_ROOT / "data" / "container.pkl"
+
+# Test write permissions in PROJECT_ROOT (e.g. if installed in Program Files)
+try:
+    test_file = PROJECT_ROOT / ".perm_check"
+    test_file.touch()
+    test_file.unlink()
+    DATA_ROOT = PROJECT_ROOT
+except (PermissionError, OSError):
+    DATA_ROOT = Path.home() / ".zerotracefw"
+
+try:
+    os.chdir(str(DATA_ROOT))
+except Exception:
+    pass
+
+COMMANDS_DIR = DATA_ROOT / ".zerotracefw" / "commands"
+PROCESSED_DIR = DATA_ROOT / ".zerotracefw" / "processed"
+MOUNT_DIR = DATA_ROOT / "mount"
+STATUS_FILE = DATA_ROOT / ".zerotracefw" / "status.json"
+CONTAINER_FILE = DATA_ROOT / "data" / "container.pkl"
+
+VHD_PATH = DATA_ROOT / ".zerotracefw" / "zfs.vhd"
+VHD_DRIVE_LETTER = "Z"
 
 COMMANDS_DIR.mkdir(parents=True, exist_ok=True)
 PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
+MOUNT_DIR.mkdir(parents=True, exist_ok=True)
 
 # Try to load PyMuPDF for native PDF rendering
 try:
@@ -627,18 +645,33 @@ class ZeroTraceFWControlPanel(QMainWindow):
         self.btn_quit.setParent(central_widget)
         self.btn_quit.setGeometry(565, 340, 165, 42)
 
-        self.btn_open_cmd = StyledButton("Commands Folder", "#475569")
-        self.btn_open_cmd.setParent(central_widget)
-        self.btn_open_cmd.setGeometry(745, 340, 165, 36)
-
-        # Buttons Row 4 & 5
-        self.btn_open_proc = StyledButton("Processed Results", "#475569")
-        self.btn_open_proc.setParent(central_widget)
-        self.btn_open_proc.setGeometry(745, 382, 165, 36)
-
         self.btn_open_mount = StyledButton("Mount Folder", "#475569")
         self.btn_open_mount.setParent(central_widget)
-        self.btn_open_mount.setGeometry(745, 424, 165, 36)
+        self.btn_open_mount.setGeometry(745, 340, 165, 42)
+
+        # Buttons Row 4
+        self.btn_upload_drive = StyledButton("Upload to Drive (zfs)", "#0284c7")
+        self.btn_upload_drive.setParent(central_widget)
+        self.btn_upload_drive.setGeometry(25, 395, 165, 42)
+        self.btn_upload_drive.clicked.connect(self.on_upload_drive)
+
+        self.btn_vhd_mount = StyledButton("Create/Mount VHD", "#059669")
+        self.btn_vhd_mount.setParent(central_widget)
+        self.btn_vhd_mount.setGeometry(205, 395, 165, 42)
+        self.btn_vhd_mount.clicked.connect(self.on_vhd_mount)
+
+        self.btn_vhd_dismount = StyledButton("Dismount VHD", "#d97706")
+        self.btn_vhd_dismount.setParent(central_widget)
+        self.btn_vhd_dismount.setGeometry(385, 395, 165, 42)
+        self.btn_vhd_dismount.clicked.connect(self.on_vhd_dismount)
+
+        self.btn_open_cmd = StyledButton("Commands Folder", "#475569")
+        self.btn_open_cmd.setParent(central_widget)
+        self.btn_open_cmd.setGeometry(565, 395, 165, 42)
+
+        self.btn_open_proc = StyledButton("Processed Results", "#475569")
+        self.btn_open_proc.setParent(central_widget)
+        self.btn_open_proc.setGeometry(745, 395, 165, 42)
 
         # Command Box
         cmd_label = QLabel('Quick Command (e.g., status, read "path/file.txt", set-ttl "path/file.txt" 5)', central_widget)
@@ -660,10 +693,22 @@ class ZeroTraceFWControlPanel(QMainWindow):
         self.btn_clear_log.setGeometry(800, 497, 110, 32)
 
         # Log Box
+        # Status box explicit dark styling (visible on any OS theme)
+        self.status_box.setStyleSheet(
+            "background-color: #0f172a; color: #94a3b8; font-family: 'Consolas'; font-size: 9pt; border: 1px solid #1e293b;"
+        )
+
+        # Command box explicit styling
+        self.command_box.setStyleSheet(
+            "background-color: #1e293b; color: #e2e8f0; border: 1px solid #334155; padding: 3px; font-family: 'Consolas';"
+        )
+
         self.log_box = QTextEdit(central_widget)
         self.log_box.setGeometry(25, 545, 940, 220)
         self.log_box.setReadOnly(True)
-        self.log_box.setStyleSheet("font-family: 'Consolas';")
+        self.log_box.setStyleSheet(
+            "background-color: #0f172a; color: #e2e8f0; font-family: 'Consolas'; font-size: 9pt; border: 1px solid #1e293b;"
+        )
 
         self.setup_signals()
         
@@ -679,10 +724,20 @@ class ZeroTraceFWControlPanel(QMainWindow):
         self.write_log("Control panel ready. ZeroTraceFW GUI enhanced version.", "success")
         self.write_log(f"Project root: {PROJECT_ROOT}", "info")
         
-        # Cleanup any lingering temporary files
-        temp_dir = PROJECT_ROOT / ".zerotracefw" / "open_temp"
+        # Cleanup any lingering temporary files and old commands from previous sessions
+        temp_dir = DATA_ROOT / ".zerotracefw" / "open_temp"
         if temp_dir.exists():
             for f in temp_dir.glob("*"):
+                try: f.unlink()
+                except: pass
+
+        if PROCESSED_DIR.exists():
+            for f in PROCESSED_DIR.glob("*.json"):
+                try: f.unlink()
+                except: pass
+
+        if COMMANDS_DIR.exists():
+            for f in COMMANDS_DIR.glob("*.json"):
                 try: f.unlink()
                 except: pass
 
@@ -697,10 +752,33 @@ class ZeroTraceFWControlPanel(QMainWindow):
         for line in data.splitlines():
             if line.strip(): self.write_log(f"[ENGINE] {line.strip()}", "info")
 
+    # Patterns that are normal operating noise — downgrade from ERR → info
+    _STDERR_NOISE = (
+        "RequestsDependencyWarning",
+        "Unable to find acceptable character detection",
+        "No valid Google Drive token",
+        "Cloud sync disabled",
+        "Plyer not installed",
+        "Cannot send desktop notification",
+        "Virtual Machine environment detected",
+        "INFO:",
+        "WARNING:",
+        "DEBUG:",
+        "ztfs_server",
+        "authenticated successfully",
+    )
+
     def handle_stderr(self):
         data = self.engine_process.readAllStandardError().data().decode("utf-8", errors="ignore")
         for line in data.splitlines():
-            if line.strip(): self.write_log(f"[ENGINE ERROR] {line.strip()}", "error")
+            stripped = line.strip()
+            if not stripped:
+                continue
+            # Suppress known benign noise and Python log lines
+            if any(noise in stripped for noise in self._STDERR_NOISE) or "INFO:" in stripped or "WARNING:" in stripped or "DEBUG:" in stripped:
+                self.write_log(f"[ENGINE] {stripped}", "info")
+                continue
+            self.write_log(f"[ENGINE ERROR] {stripped}", "error")
 
     def handle_engine_finished(self, exitCode, exitStatus):
         if hasattr(self, "master_password") and not CONTAINER_FILE.exists():
@@ -709,16 +787,19 @@ class ZeroTraceFWControlPanel(QMainWindow):
             return
 
         self.write_log(f"Background engine stopped (Code {exitCode}). Restarting to prompt for credentials...", "info")
-        # Check if they queued a quit command recently
+        # Check if they queued a quit command recently (in the last 10 seconds)
+        import time
+        now_ts = time.time()
         if (PROCESSED_DIR.exists()):
             for f in PROCESSED_DIR.glob("*.json"):
                 try:
-                    with open(f, "r") as obj:
-                        data = json.load(obj)
-                        if data.get("payload", {}).get("action") == "quit":
-                            self.write_log("Quit command detected. Closing GUI.", "info")
-                            QTimer.singleShot(1000, self.close)
-                            return
+                    if (now_ts - f.stat().st_mtime) < 10:
+                        with open(f, "r") as obj:
+                            data = json.load(obj)
+                            if data.get("payload", {}).get("action") == "quit":
+                                self.write_log("Quit command detected. Closing GUI.", "info")
+                                QTimer.singleShot(1000, self.close)
+                                return
                 except: pass
         QTimer.singleShot(500, self.start_engine)
 
@@ -780,7 +861,7 @@ class ZeroTraceFWControlPanel(QMainWindow):
         self.btn_quit.clicked.connect(lambda: self.queue_command({"action": "quit"}))
         self.btn_open_cmd.clicked.connect(lambda: os.startfile(COMMANDS_DIR))
         self.btn_open_proc.clicked.connect(lambda: os.startfile(PROCESSED_DIR))
-        self.btn_open_mount.clicked.connect(lambda: os.startfile(MOUNT_DIR))
+        self.btn_open_mount.clicked.connect(self.on_open_vhd_folder)
         self.btn_run.clicked.connect(self.on_run_command)
         self.btn_clear_log.clicked.connect(self.log_box.clear)
 
@@ -877,10 +958,23 @@ class ZeroTraceFWControlPanel(QMainWindow):
         f = self.get_vault_file()
         if not f: return
         
-        # We need the real zfs path to decrypt manually in GUI
+        # Check MOUNT_DIR and VHD drive Z:\ for the .zfs file
         zfs_path = MOUNT_DIR / f"{f.name}.zfs"
-        if not zfs_path.exists():
-            QMessageBox.critical(self, "Error", f"No .zfs encrypted file found in mount/ for {zfs_path}")
+        vhd_zfs_path = Path(f"{VHD_DRIVE_LETTER}:\\") / f"{f.name}.zfs"
+        vhd_exact_path = Path(f"{VHD_DRIVE_LETTER}:\\") / f"{f.name}"
+        
+        target_zfs = None
+        if zfs_path.exists():
+            target_zfs = zfs_path
+        elif vhd_zfs_path.exists():
+            target_zfs = vhd_zfs_path
+        elif vhd_exact_path.exists() and vhd_exact_path.name.endswith(".zfs"):
+            target_zfs = vhd_exact_path
+        elif Path(f).exists() and str(f).endswith(".zfs"):
+            target_zfs = Path(f)
+
+        if not target_zfs or not target_zfs.exists():
+            QMessageBox.critical(self, "Error", f"No .zfs encrypted file found for '{f.name}'.")
             return
             
         file_password = self.prompt_file_password("Open Securely", f"Enter password for '{f.name}' to decrypt into memory:")
@@ -890,7 +984,7 @@ class ZeroTraceFWControlPanel(QMainWindow):
             enc = EncryptionEngine()
             kdf = KeyDerivation()
             
-            data = zfs_path.read_bytes()
+            data = target_zfs.read_bytes()
             if len(data) < 48:
                 raise ValueError("Corrupted .zfs file.")
                 
@@ -995,6 +1089,68 @@ class ZeroTraceFWControlPanel(QMainWindow):
         self.update_status()
         self.update_quick_files()
         self.check_processed()
+        self.check_vhd_unencrypted_files()
+
+    def check_vhd_unencrypted_files(self):
+        drive = Path(f"{VHD_DRIVE_LETTER}:\\")
+        if not drive.exists():
+            return
+        
+        ignored_names = {"System Volume Information", "$RECYCLE.BIN", "desktop.ini", "autorun.inf", "zfs.vhd"}
+        try:
+            for item in drive.iterdir():
+                if item.is_file() and not item.name.endswith(".zfs") and not item.name.startswith("~$") and not item.name.startswith(".") and item.name not in ignored_names:
+                    self.encrypt_vhd_file(item)
+        except Exception:
+            pass
+
+    def encrypt_vhd_file(self, file_path: Path):
+        try:
+            if not file_path.exists():
+                return
+            
+            val, ok = QInputDialog.getText(
+                self, 
+                "Secure VHD Encryption", 
+                f"Unencrypted file detected in secure VHD ({VHD_DRIVE_LETTER}:\\):\n'{file_path.name}'\n\nEnter password to encrypt and save as .zfs:", 
+                QLineEdit.EchoMode.Password
+            )
+            if not ok or not val:
+                return
+
+            self.write_log(f"Encrypting '{file_path.name}' inside VHD ({VHD_DRIVE_LETTER}:\\)...", "info")
+
+            plaintext = file_path.read_bytes()
+            kdf = KeyDerivation()
+            enc = EncryptionEngine()
+
+            salt = kdf.generate_salt()
+            iv = enc.generate_iv()
+            key = kdf.derive_key(val, salt, iterations=10000)
+
+            cipher_data = enc.encrypt(plaintext, key, iv)
+
+            zfs_file = file_path.parent / f"{file_path.name}.zfs"
+            
+            padded_iv = (iv + b"\x00" * 16)[:16]
+            out_bytes = salt + padded_iv + cipher_data
+            
+            zfs_file.write_bytes(out_bytes)
+
+            try:
+                with open(file_path, "r+b") as f:
+                    f.seek(0)
+                    f.write(b"\x00" * len(plaintext))
+                file_path.unlink()
+            except Exception:
+                try: file_path.unlink()
+                except Exception: pass
+
+            self.write_log(f"Encrypted '{file_path.name}' -> '{zfs_file.name}' inside VHD ({VHD_DRIVE_LETTER}:\\)!", "success")
+            QMessageBox.information(self, "VHD Encrypted", f"'{file_path.name}' was encrypted and saved as '{zfs_file.name}' inside {VHD_DRIVE_LETTER}:\\.\nOriginal unencrypted file was securely wiped.")
+
+        except Exception as e:
+            self.write_log(f"Failed to encrypt VHD file '{file_path.name}': {e}", "error")
 
     def update_status(self):
         if not STATUS_FILE.exists():
@@ -1055,16 +1211,28 @@ class ZeroTraceFWControlPanel(QMainWindow):
         current = self.quick_file_box.currentText()
         self.quick_file_box.clear()
         self.quick_file_box.addItem("(Select a file...)")
+        files_set = set()
         try:
             if STATUS_FILE.exists():
                 with open(STATUS_FILE, "r") as f:
                     data = json.load(f)
-                files = data.get("files", {}).get("names", [])
-                self.quick_file_box.addItems(files)
-                if current in files:
-                    self.quick_file_box.setCurrentText(current)
+                files_set.update(data.get("files", {}).get("names", []))
         except:
             pass
+
+        drive = Path(f"{VHD_DRIVE_LETTER}:\\")
+        if drive.exists():
+            try:
+                for item in drive.iterdir():
+                    if item.is_file() and item.name.endswith(".zfs"):
+                        files_set.add(item.name[:-4])
+            except:
+                pass
+
+        files = sorted(list(files_set))
+        self.quick_file_box.addItems(files)
+        if current in files:
+            self.quick_file_box.setCurrentText(current)
 
     def check_processed(self):
         if not PROCESSED_DIR.exists(): return
@@ -1165,6 +1333,134 @@ class ZeroTraceFWControlPanel(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to authenticate: {e}\n(Make sure you have valid OAuth credentials configured in the source code)")
             self.write_log(f"Google Drive auth failed: {e}", "error")
+
+    def on_upload_drive(self):
+        def _bg_upload():
+            try:
+                self.write_log("Initializing Google Drive connection...", "info")
+                from zerotracefw.cloud.gdrive import GoogleDriveBackend
+                # Connect backend with folder_name="zfs" to automatically create/verify 'zfs' folder
+                backend = GoogleDriveBackend(folder_name="zfs", interactive=True)
+                
+                if not backend.service or not backend.folder_id:
+                    self.write_log("Google Drive authentication failed or not available.", "error")
+                    return
+                
+                self.write_log("Connected to Google Drive. Created/verified 'zfs' folder.", "success")
+                self.update_account_ui(backend)
+                
+                storage_dir = PROJECT_ROOT / ".zerotracefw" / "storage"
+                if not storage_dir.exists():
+                    self.write_log("Vault storage directory (.zerotracefw/storage) does not exist.", "warning")
+                    return
+                
+                files = [f for f in storage_dir.iterdir() if f.is_file()]
+                if not files:
+                    self.write_log("No encrypted files found in local vault storage to upload.", "warning")
+                    return
+                
+                self.write_log(f"Found {len(files)} encrypted file(s) in local vault. Starting upload to 'zfs' folder on Google Drive...", "info")
+                
+                count = 0
+                for f in files:
+                    fname = f.name
+                    data = f.read_bytes()
+                    self.write_log(f"Uploading '{fname}' ({len(data)} bytes) to 'zfs'...", "info")
+                    if backend.upload(fname, data):
+                        count += 1
+                        self.write_log(f"Successfully uploaded '{fname}' to Google Drive ('zfs' folder)!", "success")
+                    else:
+                        self.write_log(f"Failed to upload '{fname}' to Drive.", "error")
+                
+                self.write_log(f"Drive Cloud Backup Complete! Stored {count}/{len(files)} encrypted file(s) in Google Drive 'zfs' folder.", "success")
+            except Exception as e:
+                self.write_log(f"Error during Google Drive upload: {e}", "error")
+
+        import threading
+        threading.Thread(target=_bg_upload, daemon=True).start()
+
+    def on_vhd_mount(self):
+        def _bg():
+            try:
+                from zerotracefw.vhd_manager import VHDManager
+                mgr = VHDManager(vhd_path=VHD_PATH, drive_letter=VHD_DRIVE_LETTER)
+                if not mgr.exists():
+                    self.write_log("Creating dynamic expandable container 'zfs.vhd' (5GB max)...", "info")
+                    ok, msg = mgr.create_vhd(size_mb=5120)
+                    if ok:
+                        self.write_log(f"VHD Container Created & Mounted: {msg}", "success")
+                    else:
+                        self.write_log(f"Failed to create VHD: {msg}", "error")
+                else:
+                    self.write_log("Mounting existing 'zfs.vhd' container...", "info")
+                    ok, msg = mgr.mount_vhd()
+                    if ok:
+                        self.write_log(f"VHD Mounted: {msg}", "success")
+                    else:
+                        self.write_log(f"Failed to mount VHD: {msg}", "error")
+            except Exception as e:
+                self.write_log(f"VHD Error: {e}", "error")
+
+        import threading
+        threading.Thread(target=_bg, daemon=True).start()
+
+    def on_vhd_dismount(self):
+        def _bg():
+            try:
+                from zerotracefw.vhd_manager import VHDManager
+                mgr = VHDManager(vhd_path=VHD_PATH, drive_letter=VHD_DRIVE_LETTER)
+                self.write_log("Dismounting 'zfs.vhd' container...", "info")
+                ok, msg = mgr.dismount_vhd()
+                if ok:
+                    self.write_log(f"VHD Dismounted: {msg}", "success")
+                else:
+                    self.write_log(f"Failed to dismount VHD: {msg}", "error")
+            except Exception as e:
+                self.write_log(f"VHD Error: {e}", "error")
+
+        import threading
+        threading.Thread(target=_bg, daemon=True).start()
+
+    def on_open_vhd_folder(self):
+        """Mount zfs.vhd (create if needed) then open the drive letter in Explorer."""
+        def _bg():
+            try:
+                from zerotracefw.vhd_manager import VHDManager
+                import subprocess
+
+                mgr = VHDManager(vhd_path=VHD_PATH, drive_letter=VHD_DRIVE_LETTER)
+                drive = f"{VHD_DRIVE_LETTER}:\\"
+
+                # Check if drive is already mounted
+                if Path(drive).exists():
+                    self.write_log(f"zfs.vhd already mounted at {drive}. Opening...", "info")
+                    os.startfile(drive)
+                    return
+
+                if not mgr.exists():
+                    self.write_log("zfs.vhd not found. Creating 5GB secure container...", "info")
+                    ok, msg = mgr.create_vhd(size_mb=5120)
+                else:
+                    self.write_log("zfs.vhd found. Mounting...", "info")
+                    ok, msg = mgr.mount_vhd()
+
+                if ok:
+                    self.write_log(f"zfs.vhd mounted at {drive}  ✓", "success")
+                    import time
+                    time.sleep(1)   # let Windows assign drive letter
+                    if Path(drive).exists():
+                        os.startfile(drive)
+                    else:
+                        self.write_log(f"Drive {drive} not visible yet — check Disk Management.", "info")
+                else:
+                    self.write_log(f"Failed to mount zfs.vhd: {msg}", "error")
+            except Exception as e:
+                self.write_log(f"VHD Error: {e}", "error")
+
+        import threading
+        threading.Thread(target=_bg, daemon=True).start()
+
+
 
 if __name__ == "__main__":
     import multiprocessing

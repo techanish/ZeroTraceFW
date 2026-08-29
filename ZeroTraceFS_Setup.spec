@@ -1,17 +1,12 @@
 # -*- mode: python ; coding: utf-8 -*-
-from PyInstaller.utils.hooks import copy_metadata
-
-datas = [('logo.png', '.')]
-datas += copy_metadata('fastapi')
-datas += copy_metadata('uvicorn')
 
 
 a = Analysis(
-    ['gui_app.py'],
+    ['installer.py'],
     pathex=[],
     binaries=[],
-    datas=datas,
-    hiddenimports=['uvicorn', 'uvicorn.logging', 'uvicorn.loops', 'uvicorn.loops.auto', 'uvicorn.protocols', 'uvicorn.protocols.http', 'uvicorn.protocols.http.auto', 'uvicorn.protocols.websockets', 'uvicorn.protocols.websockets.auto', 'uvicorn.lifespan', 'uvicorn.lifespan.on', 'uvicorn.lifespan.off', 'fastapi', 'sqlite3'],
+    datas=[('dist\\ZeroTraceFW.exe', '.'), ('logo.png', '.')],
+    hiddenimports=[],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -27,7 +22,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='ZeroTraceFW',
+    name='ZeroTraceFS_Setup',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

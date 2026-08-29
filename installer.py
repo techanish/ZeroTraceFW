@@ -25,6 +25,7 @@ class InstallThread(QThread):
     item_started = pyqtSignal(int)
     item_completed = pyqtSignal(int)
     finished_install = pyqtSignal()
+    error_occurred = pyqtSignal(str)
     
     def __init__(self, target_dir):
         super().__init__()
@@ -69,6 +70,8 @@ class InstallThread(QThread):
                                 shutil.copytree(src, dst)
                             else:
                                 shutil.copy2(src, dst)
+                        else:
+                            print(f"Warning: Source file {src} does not exist.")
                 
                 # Simulate a little processing time so the UI isn't instantaneous
                 for p in range(0, 101, 20):
@@ -79,25 +82,43 @@ class InstallThread(QThread):
                 
             self.finished_install.emit()
         except Exception as e:
-            print(f"Installation error: {e}")
-            self.finished_install.emit()
+            logger_err = f"Installation failed: {e}"
+            print(logger_err)
+            self.error_occurred.emit(str(e))
 
     def create_shortcut(self):
-        # Create a desktop shortcut using powershell
+        # Create a desktop and start menu shortcut using powershell
         desktop = Path.home() / "Desktop"
-        shortcut_path = desktop / "ZeroTraceFS.lnk"
+        start_menu = Path.home() / "AppData" / "Roaming" / "Microsoft" / "Windows" / "Start Menu" / "Programs"
+        
+        shortcut_desktop = desktop / "ZeroTraceFS.lnk"
+        shortcut_start = start_menu / "ZeroTraceFS.lnk"
+        
         target_path = self.target_dir / "ZeroTraceFW.exe"
         icon_path = self.target_dir / "logo.png"
         
         ps_script = f'''
         $WshShell = New-Object -comObject WScript.Shell
-        $Shortcut = $WshShell.CreateShortcut("{shortcut_path}")
-        $Shortcut.TargetPath = "{target_path}"
-        $Shortcut.IconLocation = "{icon_path}"
-        $Shortcut.WorkingDirectory = "{self.target_dir}"
-        $Shortcut.Save()
+        
+        # Desktop Shortcut
+        $s1 = $WshShell.CreateShortcut("{shortcut_desktop}")
+        $s1.TargetPath = "{target_path}"
+        $s1.IconLocation = "{icon_path}"
+        $s1.WorkingDirectory = "{self.target_dir}"
+        $s1.Save()
+        
+        # Start Menu Shortcut
+        $s2 = $WshShell.CreateShortcut("{shortcut_start}")
+        $s2.TargetPath = "{target_path}"
+        $s2.IconLocation = "{icon_path}"
+        $s2.WorkingDirectory = "{self.target_dir}"
+        $s2.Save()
         '''
-        subprocess.run(["powershell", "-NoProfile", "-Command", ps_script], capture_output=True)
+        subprocess.run(
+            ["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-Command", ps_script],
+            capture_output=True,
+            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
+        )
 
 class InstallerWizard(QWidget):
     def __init__(self):
@@ -208,7 +229,9 @@ class InstallerWizard(QWidget):
         l2.addWidget(QLabel("\nThe installer will install ZeroTraceFS to the following folder.\nTo install in this folder, click \"Next\". To install to a different folder, enter it below or click \"Browse\"."))
         
         folder_layout = QHBoxLayout()
-        self.folder_input = QLineEdit("C:\\Program Files\\ZeroTraceFS\\")
+        # Use LocalAppData for direct zero-permission installs
+        default_dir = str(Path.home() / "AppData" / "Local" / "Programs" / "ZeroTraceFS")
+        self.folder_input = QLineEdit(default_dir)
         folder_layout.addWidget(self.folder_input)
         btn_browse = QPushButton("Browse...")
         btn_browse.clicked.connect(lambda: self.folder_input.setText(QFileDialog.getExistingDirectory(self, "Select Folder") or self.folder_input.text()))
@@ -295,37 +318,16 @@ class InstallerWizard(QWidget):
         
         self.stacked_widget.addWidget(page4)
         
-        # Page 5: Serial Key
+        # Page 5: Finish
         page5 = QWidget()
         l5 = QVBoxLayout(page5)
         l5.setContentsMargins(30, 30, 30, 30)
-        title5 = QLabel("Type your product key")
+        title5 = QLabel("Installation Complete")
         title5.setFont(QFont("Arial", 12, QFont.Weight.Bold))
         l5.addWidget(title5)
-        
-        info_box = QFrame()
-        info_box.setStyleSheet("background-color: #f5f5f5; border: 1px solid #ddd; padding: 10px;")
-        il = QVBoxLayout(info_box)
-        il.addWidget(QLabel("You can find the ZeroTraceFS product key in the email we sent you. Activation will register the product key to this computer."))
-        l5.addWidget(info_box)
-        
-        l5.addWidget(QLabel("\nProduct Key:"))
-        self.key_input = QLineEdit()
-        self.key_input.setPlaceholderText("XXXXX-XXXXX-XXXXX-XXXXX-XXXXX")
-        l5.addWidget(self.key_input)
+        l5.addWidget(QLabel("\nZeroTraceFS has been successfully installed.\nClick \"Finish\" to exit."))
         l5.addStretch()
         self.stacked_widget.addWidget(page5)
-        
-        # Page 6: Finish
-        page6 = QWidget()
-        l6 = QVBoxLayout(page6)
-        l6.setContentsMargins(30, 30, 30, 30)
-        title6 = QLabel("Installation Complete")
-        title6.setFont(QFont("Arial", 12, QFont.Weight.Bold))
-        l6.addWidget(title6)
-        l6.addWidget(QLabel("\nZeroTraceFS has been successfully installed.\nClick \"Finish\" to exit."))
-        l6.addStretch()
-        self.stacked_widget.addWidget(page6)
 
     def go_next(self):
         idx = self.stacked_widget.currentIndex()
@@ -333,9 +335,7 @@ class InstallerWizard(QWidget):
             self.stacked_widget.setCurrentIndex(3)
             self.lbl_dir.setText(f"Directory: {self.folder_input.text()}")
             self.start_installation()
-        elif idx == 4: # Serial Key page
-            self.stacked_widget.setCurrentIndex(5)
-        elif idx == 5: # Finish page
+        elif idx == 4: # Finish page
             self.close()
         else:
             self.stacked_widget.setCurrentIndex(idx + 1)
@@ -349,15 +349,12 @@ class InstallerWizard(QWidget):
 
     def update_buttons(self):
         idx = self.stacked_widget.currentIndex()
-        self.btn_back.setEnabled(idx not in [0, 3, 5])
+        self.btn_back.setEnabled(idx not in [0, 3, 4])
         
         if idx == 3: # Installing
             self.btn_next.setEnabled(False)
             self.btn_cancel.setEnabled(False)
-        elif idx == 4: # Key validation
-            self.btn_next.setText("Next")
-            self.btn_cancel.setEnabled(True)
-        elif idx == 5:
+        elif idx == 4: # Finish
             self.btn_next.setText("Finish")
             self.btn_next.setEnabled(True)
             self.btn_cancel.setEnabled(False)
@@ -373,7 +370,18 @@ class InstallerWizard(QWidget):
         self.thread.progress_update.connect(self.on_item_progress)
         self.thread.item_completed.connect(self.on_item_completed)
         self.thread.finished_install.connect(self.on_install_finished)
+        self.thread.error_occurred.connect(self.on_install_error)
         self.thread.start()
+
+    def on_install_error(self, err_msg):
+        from PyQt6.QtWidgets import QMessageBox
+        QMessageBox.critical(
+            self,
+            "Installation Failed",
+            f"An error occurred while copying files:\n\n{err_msg}\n\nIf installing to Program Files, please right-click setup and select 'Run as Administrator'."
+        )
+        self.lbl_file.setText("File: Installation failed.")
+        self.btn_cancel.setEnabled(True)
 
     def on_item_started(self, idx):
         item = self.components_list.item(idx)

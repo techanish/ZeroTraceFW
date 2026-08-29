@@ -8,6 +8,7 @@ python -m PyInstaller --clean ^
   --name "ZeroTraceFS_Setup" ^
   --onefile ^
   --windowed ^
+  --uac-admin ^
   --icon="logo.png" ^
   --add-data "dist\ZeroTraceFW.exe;." ^
   --add-data "logo.png;." ^

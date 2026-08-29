@@ -75,7 +75,11 @@ fn check_mac_addresses() -> Vec<String> {
 
     #[cfg(windows)]
     {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+
         if let Ok(output) = std::process::Command::new("getmac")
+            .creation_flags(CREATE_NO_WINDOW)
             .args(["/FO", "CSV", "/NH"]).output()
         {
             let stdout = String::from_utf8_lossy(&output.stdout).to_uppercase();
@@ -97,7 +101,11 @@ fn check_system_manufacturer() -> Vec<String> {
 
     #[cfg(windows)]
     {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+
         if let Ok(output) = std::process::Command::new("wmic")
+            .creation_flags(CREATE_NO_WINDOW)
             .args(["computersystem", "get", "manufacturer,model"]).output()
         {
             let text = String::from_utf8_lossy(&output.stdout).to_lowercase();

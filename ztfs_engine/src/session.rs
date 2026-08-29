@@ -58,7 +58,11 @@ pub fn get_hardware_fingerprint() -> String {
     // CPU info
     #[cfg(windows)]
     {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+
         if let Ok(output) = std::process::Command::new("wmic")
+            .creation_flags(CREATE_NO_WINDOW)
             .args(["cpu", "get", "processorid"])
             .output()
         {

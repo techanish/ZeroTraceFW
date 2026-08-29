@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+    <Product Id="*" Name="ZeroTraceFS" Language="1033" Version="1.0.0.0" Manufacturer="ZeroTraceFS" UpgradeCode="a1b2c3d4-e5f6-4789-9101-112233445566">
+        <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" />
+
+        <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+        <MediaTemplate EmbedCab="yes" />
+
+        <Feature Id="ProductFeature" Title="ZeroTraceFS" Level="1">
+            <ComponentGroupRef Id="ProductComponents" />
+            <ComponentRef Id="ApplicationShortcut" />
+            <ComponentRef Id="ApplicationShortcutDesktop" />
+        </Feature>
+    </Product>
+
+    <Fragment>
+        <Directory Id="TARGETDIR" Name="SourceDir">
+            <Directory Id="ProgramFilesFolder">
+                <Directory Id="INSTALLFOLDER" Name="ZeroTraceFS" />
+            </Directory>
+            <Directory Id="ProgramMenuFolder">
+                <Directory Id="ApplicationProgramsFolder" Name="ZeroTraceFS"/>
+            </Directory>
+            <Directory Id="DesktopFolder" Name="Desktop" />
+        </Directory>
+    </Fragment>
+
+    <Fragment>
+        <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
+            <Component Id="ZeroTraceFWExe" Guid="*">
+                <File Id="ZeroTraceFW.exe" Source="dist\ZeroTraceFW.exe" KeyPath="yes" />
+            </Component>
+            <Component Id="LogoPng" Guid="*">
+                <File Id="logo.png" Source="logo.png" KeyPath="yes" />
+            </Component>
+        </ComponentGroup>
+    </Fragment>
+
+    <Fragment>
+        <DirectoryRef Id="ApplicationProgramsFolder">
+            <Component Id="ApplicationShortcut" Guid="b1c2d3e4-f5a6-4789-9101-112233445566">
+                <Shortcut Id="ApplicationStartMenuShortcut" 
+                          Name="ZeroTraceFS" 
+                          Description="Launch ZeroTraceFS"
+                          Target="[#ZeroTraceFW.exe]"
+                          WorkingDirectory="INSTALLFOLDER"/>
+                <RemoveFolder Id="CleanUpShortCut" Directory="ApplicationProgramsFolder" On="uninstall"/>
+                <RegistryValue Root="HKCU" Key="Software\ZeroTraceFS" Name="installed" Type="integer" Value="1" KeyPath="yes"/>
+            </Component>
+        </DirectoryRef>
+    </Fragment>
+
+    <Fragment>
+        <DirectoryRef Id="DesktopFolder">
+            <Component Id="ApplicationShortcutDesktop" Guid="c1d2e3f4-a5b6-4789-9101-112233445566">
+                <Shortcut Id="ApplicationDesktopShortcut" 
+                          Name="ZeroTraceFS" 
+                          Description="Launch ZeroTraceFS"
+                          Target="[#ZeroTraceFW.exe]"
+                          WorkingDirectory="INSTALLFOLDER"/>
+                <RegistryValue Root="HKCU" Key="Software\ZeroTraceFS" Name="desktop_installed" Type="integer" Value="1" KeyPath="yes"/>
+            </Component>
+        </DirectoryRef>
+    </Fragment>
+</Wix>

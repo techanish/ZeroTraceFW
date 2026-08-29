@@ -9,7 +9,11 @@ use pyo3::prelude::*;
 pub fn is_secure_boot_enabled() -> bool {
     #[cfg(windows)]
     {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+
         if let Ok(output) = std::process::Command::new("powershell")
+            .creation_flags(CREATE_NO_WINDOW)
             .args(["-NoProfile", "-Command", "Confirm-SecureBootUEFI"])
             .output()
         {
@@ -38,7 +42,11 @@ fn check_suspicious_processes() -> Vec<String> {
 
     #[cfg(windows)]
     {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+
         if let Ok(output) = std::process::Command::new("tasklist")
+            .creation_flags(CREATE_NO_WINDOW)
             .args(["/FO", "CSV", "/NH"]).output()
         {
             let text = String::from_utf8_lossy(&output.stdout).to_lowercase();

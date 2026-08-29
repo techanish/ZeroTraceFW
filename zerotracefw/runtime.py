@@ -180,15 +180,61 @@ def run_zerotracefw() -> bool:
         return False
 
     def destroy_single_file(filename: str, reason: str = "Manual destroy") -> bool:
-        if not vfs.file_exists(filename):
-            print(f"File not found in vault: {filename}")
-            return False
-        if sync_engine:
-            sync_engine.remove_from_mount(filename)
-        vfs.remove_file(filename)
-        audit.log_event("DESTRUCTION", reason, filename)
-        print(f"Secure wipe complete: {filename}")
-        return True
+        basename = Path(filename).name
+        candidates = [
+            basename,
+            basename + ".zfs" if not basename.endswith(".zfs") else basename,
+            basename[:-4] if basename.endswith(".zfs") else basename,
+        ]
+
+        target_name = None
+        for cand in candidates:
+            if vfs.file_exists(cand):
+                target_name = cand
+                break
+
+        if not target_name:
+            all_names = vfs.get_all_filenames()
+            for cand in candidates:
+                for existing in all_names:
+                    if existing.lower() == cand.lower():
+                        target_name = existing
+                        break
+                if target_name:
+                    break
+
+        # Wiping physical disk files in MOUNT_DIR or VHD drive (Z:\)
+        wiped_physical = False
+        for cand in candidates:
+            for base_dir in [MOUNT_DIR, Path("Z:\\")]:
+                p = base_dir / cand
+                if p.exists() and p.is_file():
+                    try:
+                        size = p.stat().st_size
+                        with open(p, "r+b") as f:
+                            f.seek(0)
+                            f.write(b"\x00" * size)
+                        p.unlink()
+                        wiped_physical = True
+                    except Exception:
+                        try: p.unlink()
+                        except Exception: pass
+
+        if target_name:
+            if sync_engine:
+                sync_engine.remove_from_mount(target_name)
+            vfs.remove_file(target_name)
+            audit.log_event("DESTRUCTION", reason, target_name)
+            print(f"Secure wipe complete: {target_name}")
+            return True
+
+        if wiped_physical:
+            audit.log_event("DESTRUCTION", reason, filename)
+            print(f"Secure wipe complete for physical file: {filename}")
+            return True
+
+        print(f"File not found in vault or VHD drive: {filename}")
+        return False
 
     def save_everything():
         # In client-server mode we only save vault_id and vfs locally
