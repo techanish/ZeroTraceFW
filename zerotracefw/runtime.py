@@ -203,10 +203,11 @@ def run_zerotracefw() -> bool:
                 if target_name:
                     break
 
-        # Wiping physical disk files in MOUNT_DIR or VHD drive (Z:\)
+        # Wiping physical disk files in mount_path or VHD drive (Z:\)
+        mount_dir = paths.get("mount_path") if ("paths" in locals() or "paths" in globals()) else (Path.cwd() / "mount")
         wiped_physical = False
         for cand in candidates:
-            for base_dir in [MOUNT_DIR, Path("Z:\\")]:
+            for base_dir in [mount_dir, Path("Z:\\")]:
                 p = base_dir / cand
                 if p.exists() and p.is_file():
                     try:
